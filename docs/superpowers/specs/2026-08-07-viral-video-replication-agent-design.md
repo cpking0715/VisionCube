@@ -205,7 +205,18 @@ PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
 - 计费与配额
 - DAG 自定义编排、E2E 测试
 
-## 12. 假设与待定
+## 12. 开源项目调研与复用策略（2026-08-07）
+
+| 项目 | 协议 | 评估 | 结论 |
+|---|---|---|---|
+| MoneyPrinterTurbo（Python/FastAPI，~90k stars） | MIT | 五阶段流水线 + Provider 抽象，字幕/TTS/BGM 合成与本项目剪辑段相似；但无抖音解析、无 ASR 提取原文案、无爆款结构分析、无数字人、无审核 | 架构参照；实施阶段可借鉴其 MIT 许可的字幕生成、TTS 封装代码（标注来源） |
+| ClipForge（Next.js/TS） | AGPL-3.0 | "爆款复刻"为镜头级分镜复刻，数字人唇形在 Roadmap | 不采用：协议传染性 + 技术栈不符 + 核心能力缺失 |
+| Pixelle-Video（阿里，ComfyUI） | Apache-2.0 | 含数字人口播，但依赖本地模型与 GPU 自部署 | 与"全部商用 API"决策冲突，不采用 |
+| MuseTalk / LiveTalking / DUIX | 各自 | 口型驱动单点能力，需 GPU 自部署 | 暂不采用；留作未来降本的备选 DigitalHumanProvider 实现 |
+
+结论：无开源项目覆盖本项目的核心链路（解析 → ASR → 跨行业改写 → 审核 → 数字人口播），维持自建；工程模式参照 MoneyPrinterTurbo。
+
+## 13. 假设与待定
 
 - 六类商用 API 的具体供应商在实施计划阶段按报价与文档质量选定，本规格只约束接口契约
 - 数字人环节依赖商用平台公共形象/已授权克隆资产
