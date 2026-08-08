@@ -3050,7 +3050,7 @@ export default function TaskDetail() {
 }
 ```
 
-- [ ] **Step 5: 手工联调**
+- [x] **Step 5: 手工联调**
 
 ```powershell
 # 终端 1：后端
@@ -3059,14 +3059,21 @@ cd backend; uvicorn app.main:app --port 8000
 cd frontend; npm run dev
 ```
 浏览器打开 http://localhost:5173：登录 admin / admin-dev-password → 新建任务 → 观察状态推进到 AWAITING_SCRIPT → 确认脚本 → REVIEW → 完成。
-Expected: 全流程走通
+Expected: 全流程走通（已用 chrome-devtools 全流程自动化验证：登录→新建→AWAITING_SCRIPT→确认→REVIEW→完成→COMPLETED→下载 200，网络无 4xx/5xx）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add frontend
 git commit -m "feat: minimal frontend with login, task list, detail and new-task wizard"
 ```
+
+质量审查 3 Important + 5 Minor，修复提交 `2597d7b`（fix: download filename, action error feedback and 401 redirect）：
+- I-1 下载文件名无扩展名 → `api.ts` 新增 `filenameFromDisposition()` 解析 content-disposition（`filename*=UTF-8''` 优先、`filename="..."` 回退、无头回退 `visioncube-${fileId}`；Node 实测 6 种 case 含中文名解码）
+- I-2 三操作按钮失败静默 + 重复点击 + unhandled rejection → `TaskDetail.tsx` 新增 `pending`/`actionError` state，按钮 async 包装 + `disabled={pending || ...}` + 错误提示
+- I-3 401 静默冻结 → `api.ts` request 封装统一拦截（清 token + 跳 /login）；login 走独立 fetch 不误伤（冒烟实测错误密码仍显示登录失败）
+- Minor：confirm 后 selected 清空、无备选脚本空态、appendChild/click/remove/setTimeout revoke、TaskList error state
+- 复审 APPROVED；`npm run build` 零错误；遗留 1 个非阻塞 Minor（下载按钮无 catch，JWT 过期由 2s 轮询先触发跳转）
 
 ---
 
