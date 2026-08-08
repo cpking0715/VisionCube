@@ -13,6 +13,12 @@ from app.providers.base import (
 
 _SAMPLE_SCRIPT = "你知道吗，这个问题困扰了百分之九十的人。其实解决方案很简单。第一步，明确目标。第二步，立即行动。现在就试试吧。"
 
+# 分支判别词：与 Task 9 各阶段 prompt 对应（顺序敏感：scripts 需先于 structure 检测，
+# 因为 rewrite 的 prompt 同时包含"爆款结构"与"scripts"）
+_PROMPT_TITLE = "标题与话题"
+_PROMPT_SCRIPTS = "改写脚本"
+_PROMPT_STRUCTURE = "爆款结构"
+
 
 class MockParse:
     def parse(self, url: str) -> ParseResult:
@@ -42,12 +48,15 @@ class MockAsr:
 
 class MockLlm:
     def complete(self, prompt: str, *, json_mode: bool = False) -> str:
-        if "标题与话题" in prompt:
+        if _PROMPT_TITLE in prompt:
             return json.dumps({"options": [
                 {"title": f"Mock标题{i}", "hashtags": ["#爆款", "#推荐"]}
                 for i in range(1, 4)
             ]}, ensure_ascii=False)
-        if "爆款结构" in prompt or "structure" in prompt.lower():
+        if _PROMPT_SCRIPTS in prompt:
+            return json.dumps({"scripts": [_SAMPLE_SCRIPT, _SAMPLE_SCRIPT + "变体二"]},
+                              ensure_ascii=False)
+        if _PROMPT_STRUCTURE in prompt or "structure" in prompt.lower():
             return json.dumps({
                 "hook": "提问开场", "pain_points": ["效率低"],
                 "arguments": ["方法简单"], "conversion": "行动号召",
@@ -81,10 +90,12 @@ class MockTts:
 
 class MockStock:
     def search(self, keyword: str, limit: int = 6) -> list[StockItem]:
+        # Mock 素材池上限 3；limit<=0 返回空列表
+        n = max(0, min(limit, 3))
         return [StockItem(url=f"https://example.com/{keyword}-{i}.jpg",
                           thumb_url=f"https://example.com/{keyword}-{i}_t.jpg",
                           source="mock", license="cc0", author="mock")
-                for i in range(min(limit, 3))]
+                for i in range(n)]
 
     def download(self, item: StockItem, dest_dir: Path) -> Path:
         dest_dir.mkdir(parents=True, exist_ok=True)

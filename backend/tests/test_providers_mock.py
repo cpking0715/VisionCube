@@ -42,6 +42,19 @@ def test_mock_llm_title_options():
     assert len(data["options"]) == 3 and data["options"][0]["title"]
 
 
+def test_mock_llm_structure_analysis():
+    import json
+    data = json.loads(MockLlm().complete("请分析以下爆款短视频文案的爆款结构", json_mode=True))
+    assert {"hook", "pain_points", "arguments", "conversion", "style_notes"} <= set(data)
+
+
+def test_mock_llm_rewrite_prompt_returns_scripts():
+    import json
+    prompt = "保留爆款结构并迁移到目标行业……输出 1-3 版改写脚本，JSON：{\"scripts\": [...]}"
+    data = json.loads(MockLlm().complete(prompt, json_mode=True))
+    assert len(data["scripts"]) >= 1
+
+
 def test_mock_tts_clone_voice(tmp_path):
     sample = tmp_path / "s.wav"
     sample.write_bytes(b"x")
@@ -52,6 +65,7 @@ def test_mock_stock_search_and_download(tmp_path):
     s = MockStock()
     items = s.search("办公室", limit=3)
     assert len(items) == 3 and items[0].url
+    assert s.search("办公室", limit=0) == []
     f = s.download(items[0], tmp_path / "backgrounds")
     assert f.exists()
 
