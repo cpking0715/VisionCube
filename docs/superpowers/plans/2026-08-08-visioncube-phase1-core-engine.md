@@ -1840,6 +1840,11 @@ class PipelineRunner:
                 task.status = target
                 db.flush()
                 continue
+            # 入口态（如 PENDING→PARSING）先置位，保证任务状态记录每个阶段
+            if task.status != stage:
+                assert_transition(task.status, stage)
+                task.status = stage
+                db.flush()
             self._execute_stage(db, task, stage)
             db.commit()
 
