@@ -5,6 +5,8 @@ import NewTask from './pages/NewTask'
 import TaskDetail from './pages/TaskDetail'
 import TaskList from './pages/TaskList'
 import { getToken } from './api'
+import { ToastProvider } from './components/ui'
+import { AppShell } from './components/layout'
 
 function Guard({ children }: { children: ReactNode }) {
   return getToken() ? <>{children}</> : <Navigate to="/login" replace />
@@ -13,12 +15,41 @@ function Guard({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={<Guard><TaskList /></Guard>} />
-        <Route path="/new" element={<Guard><NewTask /></Guard>} />
-        <Route path="/tasks/:id" element={<Guard><TaskDetail /></Guard>} />
-      </Routes>
+      <ToastProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              <Guard>
+                <AppShell>
+                  <TaskList />
+                </AppShell>
+              </Guard>
+            }
+          />
+          <Route
+            path="/new"
+            element={
+              <Guard>
+                <AppShell>
+                  <NewTask />
+                </AppShell>
+              </Guard>
+            }
+          />
+          <Route
+            path="/tasks/:id"
+            element={
+              <Guard>
+                <AppShell>
+                  <TaskDetail />
+                </AppShell>
+              </Guard>
+            }
+          />
+        </Routes>
+      </ToastProvider>
     </BrowserRouter>
   )
 }

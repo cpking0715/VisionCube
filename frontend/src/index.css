@@ -1,3 +1,81 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================================
+   VisionCube Design Tokens（CSS 变量）
+   对应 DESIGN.md §2 Token 体系；预留深色主题覆盖空间
+   ============================================================ */
+:root {
+  /* 主色 primary */
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+
+  /* 语义色 */
+  --color-success: #10b981;
+  --color-success-bg: #ecfdf5;
+  --color-warning: #f59e0b;
+  --color-warning-bg: #fffbeb;
+  --color-danger: #ef4444;
+  --color-danger-bg: #fef2f2;
+  --color-info: #3b82f6;
+  --color-info-bg: #eff6ff;
+
+  /* 圆角（DESIGN.md §2.4） */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* 阴影（DESIGN.md §2.5） */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+
+  /* 动效（DESIGN.md §2.7） */
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-700 font-sans antialiased;
+  }
+
+  /* 全局焦点可见性：键盘导航可辨识，鼠标点击不出现 */
+  :focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 2px;
+  }
+
+  /* 深色主题预留：未来在 html[data-theme='dark'] 下覆盖变量 */
+}
+
+@layer components {
+  /* 卡片容器（DESIGN.md §3.3.2） */
+  .card {
+    @apply rounded-md shadow-sm border border-gray-200 bg-white;
+  }
+
+  /* 表单输入（DESIGN.md §3.1.2） */
+  .input {
+    @apply w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700
+      placeholder:text-gray-400 focus:border-primary-500 focus:outline-none
+      focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400;
+    height: 40px;
+  }
+
+  .input-error {
+    @apply border-danger focus:border-danger focus:ring-danger/20;
+  }
+}
