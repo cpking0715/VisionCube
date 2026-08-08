@@ -94,6 +94,7 @@ backend/data/
 node_modules/
 frontend/dist/
 *.db
+*.egg-info/
 .pytest_cache/
 .ruff_cache/
 ```
@@ -126,6 +127,7 @@ dependencies = [
     "httpx>=0.27",
     "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7",
+    "bcrypt<4.1",  # passlib 1.7.4 与 bcrypt>=4.1 不兼容，锁定兼容版本
     "sse-starlette>=2.1",
     "python-multipart>=0.0.9",
 ]
