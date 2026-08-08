@@ -1,4 +1,9 @@
-"""六类能力的抽象接口。上层（pipeline/stages）只依赖这里定义的类型。"""
+"""六类能力的抽象接口。上层（pipeline/stages）只依赖这里定义的类型。
+
+异常契约：实现必须将供应商错误映射为 app.core.exceptions 的三级错误
+（TransientPipelineError / RecoverablePipelineError / FatalPipelineError），
+禁止向调用方抛裸异常；HTTP 状态码可用 classify_http_status 快速分类。
+"""
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -57,7 +62,7 @@ class VideoParseProvider(Protocol):
     def download(self, parse_result: ParseResult, dest_dir: Path) -> Path: ...
 
 
-@runtime_checkable
+@runtime_checkable  # 仅用于契约测试的 isinstance 断言
 class AsrProvider(Protocol):
     def transcribe(self, audio_path: Path) -> list[Sentence]: ...
 
@@ -67,7 +72,10 @@ class LlmProvider(Protocol):
 
 
 class TtsProvider(Protocol):
-    def synthesize(self, text: str, voice_id: str | None, dest_dir: Path) -> TtsResult: ...
+    def synthesize(
+        self, text: str, voice_id: str | None, dest_dir: Path,
+        *, speed: float = 1.0, emotion: str | None = None,
+    ) -> TtsResult: ...
     def clone_voice(self, sample_path: Path, name: str) -> str:
         """上传参考音色样本，供应商侧克隆，返回 voice_id"""
         ...

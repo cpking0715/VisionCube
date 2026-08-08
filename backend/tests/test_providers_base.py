@@ -1,3 +1,5 @@
+from typing import Protocol
+
 from app.providers.base import (
     AsrProvider,
     DigitalHumanProvider,
@@ -33,7 +35,15 @@ def test_mock_asr_implements_protocol():
 
 
 def test_all_protocols_defined():
-    for proto in (VideoParseProvider, AsrProvider, LlmProvider, TtsProvider,
-                  DigitalHumanProvider, ModerationProvider, StockProvider):
-        assert hasattr(proto, "__protocol_attrs__") or hasattr(proto, "__abstractmethods__") \
-            or proto is not None
+    expected = {
+        VideoParseProvider: {"parse", "download"},
+        AsrProvider: {"transcribe"},
+        LlmProvider: {"complete"},
+        TtsProvider: {"synthesize", "clone_voice"},
+        DigitalHumanProvider: {"submit", "poll"},
+        ModerationProvider: {"moderate_text", "moderate_video"},
+        StockProvider: {"search", "download"},
+    }
+    for proto, methods in expected.items():
+        assert issubclass(proto, Protocol)
+        assert methods <= set(proto.__protocol_attrs__)
