@@ -1906,7 +1906,7 @@ git commit -m "feat: pipeline runner with pause points, logs and failure marking
 ### Task 11: Arq Worker（入队、执行、卡死扫描）
 
 **Files:**
-- Create: `backend/app/worker/settings.py`, `backend/app/worker/tasks.py`, `backend/app/worker/main.py`
+- Create: `backend/app/worker/__init__.py`, `backend/app/worker/settings.py`, `backend/app/worker/tasks.py`, `backend/app/worker/main.py`
 - Test: `backend/tests/test_worker_tasks.py`（直接调用 job 函数，不依赖真实 Redis）
 
 - [ ] **Step 1: 写失败测试**
@@ -1963,14 +1963,18 @@ Expected: FAIL
 `worker/tasks.py`：
 
 ```python
+import logging
+
 from sqlalchemy.orm import Session
 
+from app.core import database
 from app.core.config import settings
-from app.core.database import SessionLocal
 from app.models.task import Task, TaskStatus
 from app.pipeline.runner import PipelineRunner
-from app.pipeline.state_machine import TERMINAL_STATES, PAUSE_STATES
+from app.pipeline.state_machine import PAUSE_STATES, TERMINAL_STATES
 from app.providers.registry import build_mock_bundle
+
+logger = logging.getLogger(__name__)
 
 _NON_RECOVERABLE_ON_BOOT = (
     TaskStatus.PARSING, TaskStatus.TRANSCRIBING, TaskStatus.ANALYZING,
@@ -1986,14 +1990,20 @@ def _make_runner() -> PipelineRunner:
 
 
 async def run_pipeline(ctx: dict, task_id: int) -> None:
-    db: Session = ctx.get("db") or SessionLocal()
+    # 动态引用 database 模块：允许测试替换 SessionLocal，也保证读到 init_db 初始化后的值
+    db: Session = ctx.get("db") or database.SessionLocal()
     try:
         task = db.get(Task, task_id)
         if task is None or task.status in TERMINAL_STATES or task.status in PAUSE_STATES:
+            logger.info("skip task %s status=%s", task_id, task.status if task else None)
             return
         runner = ctx.get("runner") or _make_runner()
-        runner.run_until_pause(db, task)
-        db.commit()
+        try:
+            runner.run_until_pause(db, task)
+        except Exception:
+            logger.exception("pipeline failed for task %s", task_id)
+            raise
+        db.commit()  # runner 内部逐阶段 commit，此处兜底
     finally:
         if "db" not in ctx:
             db.close()
@@ -2027,26 +2037,42 @@ def redis_settings() -> RedisSettings:
 `worker/main.py`：
 
 ```python
+from typing import ClassVar
+
+from app.core import database
+from app.core.config import settings
 from app.worker import tasks
 from app.worker.settings import redis_settings
 
 
+async def _on_startup(ctx: dict) -> None:
+    """arq worker 启动钩子：先初始化数据库，再把重启前卡在执行中态的任务标记 FAILED。"""
+    database.init_db(settings.database_url)
+    db = database.SessionLocal()
+    try:
+        tasks.scan_stuck_tasks(db)
+    finally:
+        db.close()
+
+
 class WorkerSettings:
     redis_settings = redis_settings()
-    functions = [tasks.run_pipeline]
-    on_startup = None  # 真实启动入口在 runbook 说明：先 scan_stuck_tasks 再 arq worker
+    functions: ClassVar[list] = [tasks.run_pipeline]
+    on_startup = _on_startup
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `pytest tests/test_worker_tasks.py -v`
-Expected: PASS ×2
+Expected: PASS ×2（另含 8 个加固/边界测试：自建 session 生命周期、on_startup 顺序与 URL、暂停态不误伤、幂等跳过、16 态全集互补；全量 58 passed）
 
 - [ ] **Step 5: Commit**
 
 ```powershell
 git add backend/app/worker backend/tests/test_worker_tasks.py
-git commit -m "feat: arq worker jobs and stuck-task scanner"
+git -c user.name="cpking0715" -c user.email="1396920681@qq.com" commit -m "feat: arq worker jobs and stuck-task scanner"
+# 质量修复（on_startup 钩子 / 动态 SessionLocal / 边界测试）单独提交：
+# fix: harden worker startup, session ownership and boundary tests
 ```
 
 ---
