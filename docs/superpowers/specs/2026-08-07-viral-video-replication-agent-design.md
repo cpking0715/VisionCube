@@ -78,7 +78,7 @@ VisionCube/
 | `VideoParseProvider` | 抖音分享链接 | 标题、封面、视频直链、元信息（时长/点赞等） |
 | `AsrProvider` | 音频文件 | 带时间戳的逐句文案 |
 | `LlmProvider` | prompt + 参数 | 文本（结构分析 JSON / 备选脚本 / 封面标题） |
-| `TtsProvider` | 文本 + 音色 ID + 语速情绪参数 | 音频文件 + 逐句时间戳 |
+| `TtsProvider` | 文本 + 音色 ID + 语速情绪参数 | 音频文件 + 逐句时间戳；另提供 `clone_voice(样本音频) -> voice_id`（上传参考音色，供应商侧克隆） |
 | `DigitalHumanProvider` | 音频 + 形象 ID | 异步任务句柄；轮询后得口播视频 |
 | `ModerationProvider` | 文本 / 视频文件 | 通过与否 + 违规点明细 |
 
@@ -92,16 +92,19 @@ VisionCube/
 |---|---|---|
 | 解析 | `parse.py` | 链接校验 → `VideoParseProvider` 拉取元信息与视频直链 → 下载原视频到本地 |
 | ASR | `transcribe.py` | FFmpeg 抽取音频 → `AsrProvider` → 带时间戳逐句文案 |
-| 结构分析 | `analyze.py` | `LlmProvider` 拆解爆款结构：钩子/痛点/论据/转化结尾、语速、停顿、情绪风格 |
+| 结构分析 | `analyze.py` | `LlmProvider` 拆解爆款结构：钩子/痛点/论据/转化结尾、语速、停顿、情绪风格；同时提取原视频话题标签（来自 parse 元信息） |
 | 改写 | `rewrite.py` | 输入三件套（原文案 + 结构分析 + 目标行业/产品信息），保留叙事骨架、跨行业迁移案例与论据，输出 1-3 版备选脚本，支持多语言参数 |
+| 标题话题生成 | `meta_generate.py` | 脚本确认后，`LlmProvider` 基于确认稿生成 3 套"标题 + 话题标签"方案供用户选择（即使人工发布也是必需物料） |
 | 文本审核 | `moderate_text.py` | 确认稿送 `ModerationProvider`；未过则携带违规点反馈自动回路重新改写（最多 2 次） |
 | TTS | `synthesize.py` | 确认稿 + 所选音色 → 语音 + 逐句时间戳 |
 | 数字人 | `avatar.py` | 音频 + 形象 → 提交驱动任务 → Arq 延时任务轮询 → 口播视频 |
 | 剪辑 | `compose.py` | ASS 字幕烧录（按 subtitle_style）+ BGM 混音（人声/BGM 音量配比）+ 9:16 MP4 输出 |
-| 封面生成 | `cover.py` | FFmpeg 抽关键帧 × LLM 生成 2-3 条标题文案 → Pillow 合成 3-6 张候选封面 |
+| 封面生成 | `cover.py` | **3 种风格方案**（A 大字冲击型 / B 干净截帧型 / C 情绪渲染型），每种 FFmpeg 抽关键帧 × LLM 标题文案 → Pillow 合成 1-2 张，共 3-6 张候选；支持调参（标题文案/配色/文字位置）后重新生成 |
 | 成片审核 | `moderate_video.py` | 成片截帧 + 音轨送 `ModerationProvider`，通过才允许下载 |
 
 字幕实现：由 TTS 时间戳生成 ASS 字幕（字体/字号/颜色/描边/阴影/位置/每行字数均可配），FFmpeg `subtitles` 滤镜烧录。默认一套抖音常见样式（底部白字黑边）。
+
+剪辑配置扩展（v1.1）：除 `subtitle_style` 外，任务选项新增 `title_style`（标题样式：字体/配色/入场效果）与 `pip_config`（画中画：叠加图位置/尺寸/出现时段），均由 compose 阶段消费。
 
 封面实现：MVP 采用"关键帧 + 标题排版"，不引入文生图 API；如需纯 AI 封面，后续新增 `CoverProvider` 实现即可。
 
@@ -114,10 +117,11 @@ VisionCube/
 ```
 PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
   → AWAITING_SCRIPT        （暂停：人工选版/编辑，可循环回 REWRITING 重新生成）
-  → MODERATING_TEXT        （未过 → 自动回路 REWRITING，最多 2 次；仍失败 → FAILED）
-  → SYNTHESIZING → GENERATING_AVATAR → COMPOSING → GENERATING_COVER
+  → META_GENERATING        （生成 3 套"标题+话题"方案）
+  → MODERATING_TEXT        （审核确认稿 + 标题；未过 → 自动回路 REWRITING，最多 2 次；仍失败 → FAILED）
+  → SYNTHESIZING → GENERATING_AVATAR → COMPOSING → GENERATING_COVER（3 种风格方案）
   → MODERATING_VIDEO       （未过 → FAILED，可从剪辑阶段重试）
-  → REVIEW                 （暂停：选封面；调字幕样式触发局部回到 COMPOSING 重剪）
+  → REVIEW                 （暂停：选封面方案、选标题方案、调字幕样式；调样式触发局部回到 COMPOSING 重剪）
   → COMPLETED
 
 任意阶段失败 → FAILED（记录失败阶段，可从该阶段断点重试，前序产物复用）
@@ -167,11 +171,12 @@ PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
 4. 合规双保险：改写提示词内置违规规避指令，降低审核触发整改频率；数字人仅允许平台公共形象或用户已授权资产
 5. 人工确认点无超时，不占用 worker
 
-## 8. 数据模型（6 张表）
+## 8. 数据模型（7 张表）
 
 - `users`：认证与基础信息
-- `tasks`：状态机主表。含 `status`、`failed_stage`、`source_url`、`target_industry`、`product_brief`、`subtitle_style`(JSON)、`selected_cover`、语言/音色/形象选项、各阶段产物引用
+- `tasks`：状态机主表。含 `status`、`failed_stage`、`source_url`、`target_industry`、`product_brief`、`subtitle_style`/`title_style`/`pip_config`(JSON)、`selected_cover`、语言/音色/形象选项、各阶段产物引用
 - `scripts`：多版本文案（原版 + 1-3 改写版 + 确认稿标记 + 整改轮次）
+- `publish_metas`：标题+话题方案（每任务 3 版，含选中标记），REVIEW 阶段选择；作为未来自动发布的物料，也随成片打包供人工发布使用
 - `assets`：数字人形象、音色、BGM（类型、供应商引用 ID、文件引用）
 - `video_files`：所有媒体文件（路径、类型、大小、时长、所属任务/阶段）
 - `stage_logs`：阶段执行与错误留痕
@@ -221,3 +226,15 @@ PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
 - 六类商用 API 的具体供应商在实施计划阶段按报价与文档质量选定，本规格只约束接口契约
 - 数字人环节依赖商用平台公共形象/已授权克隆资产
 - FFmpeg 与 Redis 作为运行时依赖，由部署文档说明安装要求
+
+## 14. v1.1 设计优化（2026-08-08，参照成熟全链路智能体方案）
+
+对照成熟产品流程梳理，吸收以下优化（上文各节已同步修订）：
+
+1. **标题话题三方案**：新增 `META_GENERATING` 阶段（脚本确认后、文本审核前），LLM 生成 3 套"标题 + 话题标签"方案存 `publish_metas` 表；标题与脚本一同过文本审核（审核未过的整改回路会连带重新生成标题）；REVIEW 阶段用户选定一套，随成片作为发布物料包输出。参考分析阶段同时提取原视频话题标签作为生成输入。
+2. **封面三方案**：封面生成升级为 3 种风格方案（大字冲击/干净截帧/情绪渲染）× 每种 1-2 张，支持标题文案、配色、文字位置调参后重新生成（重生成只重跑封面阶段，不重剪）。
+3. **参考音色克隆**：`TtsProvider` 增加 `clone_voice(sample_audio) -> voice_id`，用户上传参考音频后由供应商侧完成克隆，资产存 `assets` 表（kind=voice）；未克隆时回退平台公共音色。
+4. **剪辑风格扩展**：任务选项新增 `title_style`（标题样式）与 `pip_config`（画中画：叠加图位置/尺寸/出现时段），与 `subtitle_style` 并列由 compose 阶段消费。
+5. **发布物料包**：任务完成时导出"成片 MP4 + 选定封面 + 选中标题与话题文本"物料包，为未来自动发布预留标准化输出（自动发布本身仍不在 MVP）。
+
+实施节奏：阶段 1 落地数据模型字段、状态机新状态与 Mock 阶段（生成逻辑全 Mock）；真实生成与交互选择（标题/封面选择器、音色上传、调参重生成）随阶段 2-4 接入。

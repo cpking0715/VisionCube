@@ -16,6 +16,7 @@
 - 数字人轮询：MockDigitalHumanProvider 同步返回，轮询框架（Arq 延时任务）照常搭建并用测试覆盖
 - SSE 进度推送延后到阶段 2；阶段 1 前端用 2 秒轮询（单用户场景足够）
 - 前端 Vitest 组件测试随阶段 4（完整向导/字幕/封面交互）一并补齐；阶段 1 前端以手工联调验收
+- v1.1 优化落地范围：META_GENERATING 状态 + Mock 阶段 + publish_metas 表 + title_style/pip_config 字段 + clone_voice 契约；标题/封面选择交互、调参重生成、真实音色克隆随阶段 2-4 接入
 
 ---
 
@@ -38,6 +39,7 @@ backend/
 │   │   ├── user.py                 # User
 │   │   ├── task.py                 # TaskStatus 枚举 + Task
 │   │   ├── script.py               # Script
+│   │   ├── publish_meta.py         # PublishMeta（标题/话题三方案）
 │   │   ├── asset.py                # Asset
 │   │   ├── video_file.py           # VideoFile
 │   │   └── stage_log.py            # StageLog
@@ -53,7 +55,7 @@ backend/
 │   │   └── registry.py             # 按配置装配 Provider 实例
 │   ├── pipeline/
 │   │   ├── state_machine.py        # 状态枚举、白名单、转移校验
-│   │   ├── stages/                 # 十阶段处理器 + registry
+│   │   ├── stages/                 # 十一阶段处理器 + registry
 │   │   └── runner.py               # 单步/续跑执行器 + 产物登记
 │   ├── worker/
 │   │   ├── settings.py             # ArqSettings
@@ -314,15 +316,16 @@ git commit -m "feat: settings, database bootstrap and test fixtures"
 
 ---
 
-### Task 3: 数据模型（6 张表）
+### Task 3: 数据模型（7 张表）
 
 **Files:**
-- Create: `backend/app/models/user.py`, `task.py`, `script.py`, `asset.py`, `video_file.py`, `stage_log.py`
+- Create: `backend/app/models/user.py`, `task.py`, `script.py`, `publish_meta.py`, `asset.py`, `video_file.py`, `stage_log.py`
 - Test: `backend/tests/test_models.py`
 
 - [ ] **Step 1: 写失败测试**
 
 ```python
+from app.models.publish_meta import PublishMeta
 from app.models.task import Task, TaskStatus
 from app.models.user import User
 from app.models.video_file import VideoFile
@@ -347,13 +350,15 @@ def test_create_task_with_relations(db_session):
     vf = VideoFile(user_id=user.id, task_id=task.id, kind="source_video",
                    path="data/1/t1/source.mp4", size_bytes=1024)
     log = StageLog(task_id=task.id, stage="PARSING", status="success", detail="{}")
-    db_session.add_all([vf, log])
+    pm = PublishMeta(task_id=task.id, title="标题一", hashtags=["#爆款"], version=1)
+    db_session.add_all([vf, log, pm])
     db_session.commit()
 
     assert task.id is not None
     assert task.user_id == user.id
     assert vf.task_id == task.id
     assert log.task_id == task.id
+    assert pm.task_id == task.id
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -396,6 +401,7 @@ class TaskStatus(str, enum.Enum):
     ANALYZING = "ANALYZING"
     REWRITING = "REWRITING"
     AWAITING_SCRIPT = "AWAITING_SCRIPT"
+    META_GENERATING = "META_GENERATING"
     MODERATING_TEXT = "MODERATING_TEXT"
     SYNTHESIZING = "SYNTHESIZING"
     GENERATING_AVATAR = "GENERATING_AVATAR"
@@ -424,6 +430,8 @@ class Task(Base, TimestampMixin):
     voice_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     avatar_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     subtitle_style: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    title_style: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    pip_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     selected_cover_id: Mapped[int | None] = mapped_column(
         ForeignKey("video_files.id"), nullable=True
     )
@@ -449,7 +457,27 @@ class Script(Base, TimestampMixin):
     is_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
 ```
 
-`app/models/asset.py`:
+`app/models/publish_meta.py`：
+
+```python
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base, TimestampMixin
+
+
+class PublishMeta(Base, TimestampMixin):
+    __tablename__ = "publish_metas"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True)
+    title: Mapped[str] = mapped_column(String(256))
+    hashtags: Mapped[list] = mapped_column(JSON, default=list)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
+```
+
+`app/models/asset.py`：
 ```python
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -719,7 +747,8 @@ def test_happy_path_chain():
         (TaskStatus.TRANSCRIBING, TaskStatus.ANALYZING),
         (TaskStatus.ANALYZING, TaskStatus.REWRITING),
         (TaskStatus.REWRITING, TaskStatus.AWAITING_SCRIPT),
-        (TaskStatus.AWAITING_SCRIPT, TaskStatus.MODERATING_TEXT),
+        (TaskStatus.AWAITING_SCRIPT, TaskStatus.META_GENERATING),
+        (TaskStatus.META_GENERATING, TaskStatus.MODERATING_TEXT),
         (TaskStatus.MODERATING_TEXT, TaskStatus.SYNTHESIZING),
         (TaskStatus.SYNTHESIZING, TaskStatus.GENERATING_AVATAR),
         (TaskStatus.GENERATING_AVATAR, TaskStatus.COMPOSING),
@@ -753,6 +782,7 @@ def test_illegal_transition_raises():
 
 def test_next_stage():
     assert next_stage(TaskStatus.PENDING) == TaskStatus.PARSING
+    assert next_stage(TaskStatus.AWAITING_SCRIPT) == TaskStatus.META_GENERATING
     assert next_stage(TaskStatus.MODERATING_VIDEO) == TaskStatus.REVIEW
     assert next_stage(TaskStatus.COMPLETED) is None
 
@@ -782,7 +812,8 @@ _ALLOWED: dict[TaskStatus, set[TaskStatus]] = {
     TaskStatus.TRANSCRIBING: {TaskStatus.ANALYZING},
     TaskStatus.ANALYZING: {TaskStatus.REWRITING},
     TaskStatus.REWRITING: {TaskStatus.AWAITING_SCRIPT},
-    TaskStatus.AWAITING_SCRIPT: {TaskStatus.MODERATING_TEXT, TaskStatus.REWRITING},
+    TaskStatus.AWAITING_SCRIPT: {TaskStatus.META_GENERATING, TaskStatus.REWRITING},
+    TaskStatus.META_GENERATING: {TaskStatus.MODERATING_TEXT},
     TaskStatus.MODERATING_TEXT: {TaskStatus.SYNTHESIZING, TaskStatus.REWRITING},
     TaskStatus.SYNTHESIZING: {TaskStatus.GENERATING_AVATAR},
     TaskStatus.GENERATING_AVATAR: {TaskStatus.COMPOSING},
@@ -796,7 +827,8 @@ _ALLOWED: dict[TaskStatus, set[TaskStatus]] = {
 _MAIN_CHAIN: list[TaskStatus] = [
     TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.TRANSCRIBING,
     TaskStatus.ANALYZING, TaskStatus.REWRITING, TaskStatus.AWAITING_SCRIPT,
-    TaskStatus.MODERATING_TEXT, TaskStatus.SYNTHESIZING, TaskStatus.GENERATING_AVATAR,
+    TaskStatus.META_GENERATING, TaskStatus.MODERATING_TEXT, TaskStatus.SYNTHESIZING,
+    TaskStatus.GENERATING_AVATAR,
     TaskStatus.COMPOSING, TaskStatus.GENERATING_COVER, TaskStatus.MODERATING_VIDEO,
     TaskStatus.REVIEW, TaskStatus.COMPLETED,
 ]
@@ -949,6 +981,9 @@ class LlmProvider(Protocol):
 
 class TtsProvider(Protocol):
     def synthesize(self, text: str, voice_id: str | None, dest_dir: Path) -> TtsResult: ...
+    def clone_voice(self, sample_path: Path, name: str) -> str:
+        """上传参考音色样本，供应商侧克隆，返回 voice_id"""
+        ...
 
 
 class DigitalHumanProvider(Protocol):
@@ -1026,6 +1061,18 @@ def test_mock_tts_writes_audio(tmp_path):
     assert sum(s.duration for s in r.sentences) > 0
 
 
+def test_mock_llm_title_options():
+    import json
+    data = json.loads(MockLlm().complete("请生成标题与话题", json_mode=True))
+    assert len(data["options"]) == 3 and data["options"][0]["title"]
+
+
+def test_mock_tts_clone_voice(tmp_path):
+    sample = tmp_path / "s.wav"
+    sample.write_bytes(b"x")
+    assert MockTts().clone_voice(sample, "我的音色") == "mock-voice-1"
+
+
 def test_mock_digital_human_submit_then_poll(tmp_path):
     dh = MockDigitalHuman()
     job = dh.submit(tmp_path / "a.mp3", None)
@@ -1092,6 +1139,11 @@ class MockAsr:
 
 class MockLlm:
     def complete(self, prompt: str, *, json_mode: bool = False) -> str:
+        if "标题与话题" in prompt:
+            return json.dumps({"options": [
+                {"title": f"Mock标题{i}", "hashtags": ["#爆款", "#推荐"]}
+                for i in range(1, 4)
+            ]}, ensure_ascii=False)
         if "爆款结构" in prompt or "structure" in prompt.lower():
             return json.dumps({
                 "hook": "提问开场", "pain_points": ["效率低"],
@@ -1116,6 +1168,9 @@ class MockTts:
             sentences.append(Sentence(text=p, start=t, end=t + dur))
             t += dur
         return TtsResult(audio_path=audio, sentences=sentences)
+
+    def clone_voice(self, sample_path: Path, name: str) -> str:
+        return "mock-voice-1"
 
 
 class MockDigitalHuman:
@@ -1170,7 +1225,7 @@ def build_mock_bundle() -> ProviderBundle:
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `pytest tests/test_providers_mock.py -v`
-Expected: PASS ×7
+Expected: PASS ×9
 
 - [ ] **Step 5: Commit**
 
@@ -1181,10 +1236,10 @@ git commit -m "feat: mock providers and registry bundle"
 
 ---
 
-### Task 9: 阶段处理器（10 个 stage + registry）
+### Task 9: 阶段处理器（11 个 stage + registry）
 
 **Files:**
-- Create: `backend/app/pipeline/stages/__init__.py`, `parse.py`, `transcribe.py`, `analyze.py`, `rewrite.py`, `moderate_text.py`, `synthesize.py`, `avatar.py`, `compose.py`, `cover.py`, `moderate_video.py`
+- Create: `backend/app/pipeline/stages/__init__.py`, `parse.py`, `transcribe.py`, `analyze.py`, `rewrite.py`, `meta_generate.py`, `moderate_text.py`, `synthesize.py`, `avatar.py`, `compose.py`, `cover.py`, `moderate_video.py`
 - Test: `backend/tests/test_stages.py`
 
 阶段处理器统一契约：
@@ -1231,8 +1286,9 @@ def ctx(db_session, tmp_path):
 
 def test_all_stages_registered():
     for s in (TS.PARSING, TS.TRANSCRIBING, TS.ANALYZING, TS.REWRITING,
-              TS.MODERATING_TEXT, TS.SYNTHESIZING, TS.GENERATING_AVATAR,
-              TS.COMPOSING, TS.GENERATING_COVER, TS.MODERATING_VIDEO):
+              TS.META_GENERATING, TS.MODERATING_TEXT, TS.SYNTHESIZING,
+              TS.GENERATING_AVATAR, TS.COMPOSING, TS.GENERATING_COVER,
+              TS.MODERATING_VIDEO):
         assert s in STAGE_RUNNERS
 
 
@@ -1262,12 +1318,16 @@ def test_full_mock_chain_produces_final_and_covers(ctx):
     script.kind = "final"
     script.is_confirmed = True
     ctx.db.flush()
-    for s in (TS.MODERATING_TEXT, TS.SYNTHESIZING, TS.GENERATING_AVATAR,
-              TS.COMPOSING, TS.GENERATING_COVER, TS.MODERATING_VIDEO):
+    for s in (TS.META_GENERATING, TS.MODERATING_TEXT, TS.SYNTHESIZING,
+              TS.GENERATING_AVATAR, TS.COMPOSING, TS.GENERATING_COVER,
+              TS.MODERATING_VIDEO):
         STAGE_RUNNERS[s](ctx)
     ctx.db.flush()
     kinds = {f.kind for f in ctx.db.query(VideoFile).filter_by(task_id=ctx.task.id)}
     assert {"source_video", "audio", "avatar_video", "final", "cover"} <= kinds
+    from app.models.publish_meta import PublishMeta
+    metas = ctx.db.query(PublishMeta).filter_by(task_id=ctx.task.id).all()
+    assert len(metas) == 3
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -1288,8 +1348,8 @@ from sqlalchemy.orm import Session
 from app.models.task import Task, TaskStatus
 from app.providers.registry import ProviderBundle
 from app.pipeline.stages import (
-    analyze, avatar, compose, cover, moderate_text, moderate_video,
-    parse, rewrite, synthesize, transcribe,
+    analyze, avatar, compose, cover, meta_generate, moderate_text,
+    moderate_video, parse, rewrite, synthesize, transcribe,
 )
 
 
@@ -1306,6 +1366,7 @@ STAGE_RUNNERS = {
     TaskStatus.TRANSCRIBING: transcribe.run,
     TaskStatus.ANALYZING: analyze.run,
     TaskStatus.REWRITING: rewrite.run,
+    TaskStatus.META_GENERATING: meta_generate.run,
     TaskStatus.MODERATING_TEXT: moderate_text.run,
     TaskStatus.SYNTHESIZING: synthesize.run,
     TaskStatus.GENERATING_AVATAR: avatar.run,
@@ -1410,6 +1471,30 @@ def run(ctx) -> None:
     ctx.db.flush()
 ```
 
+`stages/meta_generate.py`（标题话题三方案，v1.1）：
+
+```python
+import json
+
+from app.models.publish_meta import PublishMeta
+from app.models.script import Script
+
+
+def run(ctx) -> None:
+    final = (ctx.db.query(Script)
+             .filter_by(task_id=ctx.task.id, is_confirmed=True)
+             .order_by(Script.id.desc()).first())
+    prompt = (f"基于以下确认脚本，生成标题与话题：\n{final.content}\n"
+              f"输出 JSON：{{\"options\": [{{\"title\": \"...\", "
+              f"\"hashtags\": [\"#...\"]}}]}}，共 3 套")
+    data = json.loads(ctx.bundle.llm.complete(prompt, json_mode=True))
+    ctx.db.query(PublishMeta).filter_by(task_id=ctx.task.id).delete()  # 整改回路重生成时替换旧方案
+    for i, item in enumerate(data.get("options", [])[:3]):
+        ctx.db.add(PublishMeta(task_id=ctx.task.id, title=item["title"],
+                               hashtags=item.get("hashtags", []), version=i + 1))
+    ctx.db.flush()
+```
+
 `stages/moderate_text.py`：
 
 ```python
@@ -1482,7 +1567,7 @@ def run(ctx) -> None:
     # 阶段 2 接入 FFmpeg：ASS 字幕烧录（subtitle_style）+ BGM 混音 + 9:16 输出
 ```
 
-`stages/cover.py`（阶段 1 Mock：写占位封面文件）：
+`stages/cover.py`（阶段 1 Mock：写占位封面文件；阶段 3 按 3 种风格方案实现）：
 
 ```python
 from app.pipeline.stages._util import latest_file, register_file
@@ -1497,7 +1582,8 @@ def run(ctx) -> None:
         cover = ctx.task_dir / f"cover_{i}.jpg"
         cover.write_bytes(b"MOCK-COVER")
         register_file(ctx, cover, "cover", "GENERATING_COVER")
-    # 阶段 3 接入：FFmpeg 抽帧 + LLM 标题 + Pillow 合成
+    # 阶段 3 接入：3 种风格方案（大字冲击/干净截帧/情绪渲染）× 每种 1-2 张，
+    # FFmpeg 抽帧 + LLM 标题 + Pillow 合成，支持调参重生成
 ```
 
 `stages/moderate_video.py`：
@@ -1575,7 +1661,7 @@ def test_resume_after_confirm_runs_to_review(db_session, task, tmp_path):
     # 模拟确认脚本
     s = db_session.query(Script).filter_by(task_id=task.id, kind="rewrite").first()
     s.is_confirmed = True
-    task.status = TS.MODERATING_TEXT  # 确认 API 负责置位
+    task.status = TS.META_GENERATING  # 确认 API 负责置位
     db_session.flush()
     runner.run_until_pause(db_session, task)
     assert task.status == TS.REVIEW
@@ -1780,7 +1866,8 @@ from app.providers.registry import build_mock_bundle
 
 _NON_RECOVERABLE_ON_BOOT = (
     TaskStatus.PARSING, TaskStatus.TRANSCRIBING, TaskStatus.ANALYZING,
-    TaskStatus.REWRITING, TaskStatus.MODERATING_TEXT, TaskStatus.SYNTHESIZING,
+    TaskStatus.REWRITING, TaskStatus.META_GENERATING, TaskStatus.MODERATING_TEXT,
+    TaskStatus.SYNTHESIZING,
     TaskStatus.GENERATING_AVATAR, TaskStatus.COMPOSING,
     TaskStatus.GENERATING_COVER, TaskStatus.MODERATING_VIDEO,
 )
@@ -2117,6 +2204,8 @@ class TaskCreate(BaseModel):
     voice_id: str | None = None
     avatar_id: str | None = None
     subtitle_style: dict | None = None
+    title_style: dict | None = None
+    pip_config: dict | None = None
 
 
 class ScriptConfirm(BaseModel):
@@ -2147,7 +2236,8 @@ def create_task(body: TaskCreate, bg: BackgroundTasks,
     task = Task(user_id=user.id, source_url=body.source_url,
                 target_industry=body.target_industry, product_brief=body.product_brief,
                 language=body.language, voice_id=body.voice_id, avatar_id=body.avatar_id,
-                subtitle_style=body.subtitle_style, status=TaskStatus.PENDING)
+                subtitle_style=body.subtitle_style, title_style=body.title_style,
+                pip_config=body.pip_config, status=TaskStatus.PENDING)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -2189,7 +2279,7 @@ def confirm_script(task_id: int, body: ScriptConfirm, bg: BackgroundTasks,
     if body.content:
         script.content = body.content
     script.is_confirmed = True
-    task.status = TaskStatus.MODERATING_TEXT
+    task.status = TaskStatus.META_GENERATING
     db.commit()
     _run_now(task.id)
     db.refresh(task)
@@ -2912,5 +3002,6 @@ git push
 - 接入真实商用 API：VideoParseProvider、AsrProvider、LlmProvider（含提示词工程与爆款结构 schema）
 - Arq 入队替换内联执行 + SSE 进度推送
 - 审核整改回路（TEXT_MODERATION_FAILED → REWRITING 自动重改写，上限 2 次）
+- 音色上传克隆（clone_voice）与资产管理 API
 - 供应商选型落地（按规格 §13 待定项）
 
