@@ -49,6 +49,13 @@ def test_illegal_transition_raises():
         assert_transition(TaskStatus.COMPLETED, TaskStatus.PARSING)
 
 
+def test_terminal_states_are_frozen():
+    with pytest.raises(ValueError):
+        assert_transition(TaskStatus.FAILED, TaskStatus.PARSING)
+    with pytest.raises(ValueError):
+        assert_transition(TaskStatus.COMPLETED, TaskStatus.FAILED)
+
+
 def test_next_stage():
     assert next_stage(TaskStatus.PENDING) == TaskStatus.PARSING
     assert next_stage(TaskStatus.AWAITING_SCRIPT) == TaskStatus.META_GENERATING
