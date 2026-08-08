@@ -3183,10 +3183,24 @@ git push
 
 ## 阶段 1 验收标准
 
-1. `pytest -q` 全部通过，pipeline/providers 覆盖率 >= 80%
+1. `pytest -q` 全部通过，pipeline/providers 覆盖率 >= 80%（已落地：CI 增加 `--cov-fail-under=80` 门槛）
 2. 手工跑通：登录 → 新建任务（Mock 自动跑到 AWAITING_SCRIPT）→ 确认脚本 → REVIEW → 完成
-3. 失败注入：任一阶段抛错后任务置 FAILED，重试可从失败阶段继续
+3. 失败注入：任一阶段抛错后任务置 FAILED，重试可从失败阶段继续（runner 层 + API 层均有完整用例）
 4. CI 流水线（ruff + pytest）在 push 后绿
+
+## 阶段 1 完成记录（2026-08-08，51 commits，全部 push）
+
+- 最终整体审查：ready to merge，无 Critical；遗留 Minor 与规格偏差记录见下
+- 最终修复 `7eabda7` + `a4a450b`（85 passed）：source_url 预检（422）、API 层 retry 完整用例、覆盖率门槛入 CI、前端防重复提交/下载 catch、注释修正
+- 验收标准 4 条全部达成（CI 已由 push 触发）
+
+### 规格偏差记录（阶段 1 有意裁剪，阶段 2 补齐）
+
+- **I-2**：规格 §8“全部表带 user_id”未完全落实——`scripts`/`publish_metas`/`stage_logs` 三表无 user_id（通过 task 间接归属）。当前无越权漏洞（所有查询均先经任务归属校验），阶段 2 新增直查脚本/物料/日志的 API 前必须补列（SQLite 需重建表或加列迁移）
+- **I-3 已修复**：规格 §6.2 链接预检（http/https 前缀 + 2048 长度上限 → 422）已在创建任务端点落地（原缺失，最终审查发现后补）
+- **M-1**：规格 §8 `tasks.publish_status` 预留字段未实现，阶段 2 随发布物料包一并补
+- **M-7**：规格 §6.1 stage_logs“耗时、输入输出摘要”未实现（当前仅状态/错误码），阶段 2 补 duration 与摘要
+- **M-6**：jwt_secret/admin_password 默认弱值（.env.example/runbook 有提醒），生产部署须覆盖；建议阶段 2 启动时对默认值打 WARN
 
 ## 阶段 2 预告（另行出计划文档）
 
@@ -3195,4 +3209,5 @@ git push
 - 审核整改回路（TEXT_MODERATION_FAILED → REWRITING 自动重改写，上限 2 次）
 - 音色上传克隆（clone_voice）与资产管理 API
 - 供应商选型落地（按规格 §13 待定项）
+- 补 user_id 列（scripts/publish_metas/stage_logs）+ publish_status + stage_logs 耗时字段
 
