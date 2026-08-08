@@ -21,7 +21,7 @@ def test_full_business_flow_with_mock_providers(db_session, tmp_path, monkeypatc
     app.dependency_overrides[get_current_user] = lambda: user
 
     from app.api import tasks as tasks_api
-    tasks_api._DATA_ROOT = tmp_path
+    monkeypatch.setattr(tasks_api, "_DATA_ROOT", tmp_path)
 
     client = TestClient(app)
     r = client.post("/api/tasks", json={
@@ -34,10 +34,19 @@ def test_full_business_flow_with_mock_providers(db_session, tmp_path, monkeypatc
     assert r.json()["status"] == "AWAITING_SCRIPT"
 
     detail = client.get(f"/api/tasks/{task_id}").json()
+    assert detail["scripts"]
     script_id = detail["scripts"][0]["id"]
     r2 = client.post(f"/api/tasks/{task_id}/confirm-script",
                      json={"script_id": script_id})
+    assert r2.status_code == 200
     assert r2.json()["status"] == "REVIEW"
 
+    # REVIEW 暂停点：流水线已产出从解析到封面的完整产物链
+    detail = client.get(f"/api/tasks/{task_id}").json()
+    assert detail["files"]
+    assert {"source_video", "audio", "avatar_video", "final", "cover"} <= {
+        f["kind"] for f in detail["files"]}
+
     r3 = client.post(f"/api/tasks/{task_id}/complete")
+    assert r3.status_code == 200
     assert r3.json()["status"] == "COMPLETED"

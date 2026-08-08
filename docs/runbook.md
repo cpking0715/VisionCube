@@ -8,7 +8,7 @@
 | 组件 | 版本要求 | 用途 | 备注 |
 | --- | --- | --- | --- |
 | Python | >= 3.12 | 后端 FastAPI 应用 | 项目声明 `requires-python = ">=3.12"` |
-| Node.js | >= 20 | 前端 React + Vite | |
+| Node.js | >= 20.19 | 前端 React + Vite | Vite 8 engines：`^20.19.0 \|\| >=22.12.0` |
 | FFmpeg | 任意较新版本 | 视频解析/合成（阶段 2 使用） | 阶段 1 Mock 流水线不需要，先装好备用 |
 | Redis | >= 5 | Arq worker 队列（阶段 2 使用） | 阶段 1 任务内联执行，Redis 仅备阶段 2；本地可用 Docker：`docker run -d -p 6379:6379 redis:7` |
 
@@ -58,7 +58,7 @@ npm install        # 首次
 npm run dev
 ```
 
-访问 http://localhost:5173 ，使用 `admin` / `admin-dev-password` 登录。
+访问 http://localhost:5173 ，使用 `admin` / `admin-dev-password` 登录（若存在 `backend/.env`，密码以其中 `ADMIN_PASSWORD` 为准）。
 
 ## 4. 后端测试与静态检查
 
@@ -122,4 +122,4 @@ ruff check app tests               # 静态检查，0 错误
 | 路径 | 内容 |
 | --- | --- |
 | `backend/data/visioncube.db` | SQLite 业务库（已被 .gitignore 忽略） |
-| `backend/data/{task_id}/{stage}/` | 各阶段产物：source.mp4 / transcript.json / tts_sentences.json / voice.mp3 / avatar.mp4 / cover_*.jpg / final.mp4 |
+| `backend/data/{user_id}/{task_id}/` | 任务产物目录（全部产物在同一目录，无 stage 子目录）：source.mp4 / transcript.json / tts_sentences.json / voice.mp3 / avatar.mp4 / cover_*.jpg / final.mp4 |
