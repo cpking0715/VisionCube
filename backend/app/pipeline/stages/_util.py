@@ -5,7 +5,15 @@ from app.models.video_file import VideoFile
 
 
 def register_file(ctx, path: Path, kind: str, stage: str) -> VideoFile:
-    """原子登记：临时文件改名后入库（阶段 1 Mock 直接写终态名，仍走此入口）。"""
+    """登记产物（按 task+path 去重，支持 resume 幂等重跑）。"""
+    existing = (ctx.db.query(VideoFile)
+                .filter_by(task_id=ctx.task.id, path=str(path)).first())
+    if existing:
+        existing.kind = kind
+        existing.stage = stage
+        existing.size_bytes = os.path.getsize(path) if path.exists() else None
+        ctx.db.flush()
+        return existing
     vf = VideoFile(
         user_id=ctx.task.user_id, task_id=ctx.task.id, kind=kind, stage=stage,
         path=str(path), size_bytes=os.path.getsize(path) if path.exists() else None,

@@ -58,6 +58,36 @@ def test_failure_marks_stage_and_can_resume(db_session, task, tmp_path):
     assert task.status == TS.FAILED
     assert task.failed_stage == TS.PARSING.value
     assert task.error_code == "PARSE_EMPTY"
+    logs = db_session.query(StageLog).filter_by(task_id=task.id).all()
+    assert any(l.stage == TS.PARSING.value and l.status == "failed" for l in logs)
+    # 失败后立即停止，不执行后续阶段
+    assert not any(l.stage == TS.TRANSCRIBING.value for l in logs)
+    # 从 FAILED 恢复：置回入口态后重跑
+    task.status = TS.PENDING
+    task.failed_stage = None
+    task.error_code = None
+    task.error_message = None
+    db_session.flush()
+    runner = PipelineRunner(build_mock_bundle(), data_root=tmp_path)
+    runner.run_until_pause(db_session, task)
+    assert task.status == TS.AWAITING_SCRIPT
+
+
+def test_crash_marks_internal_failure(db_session, task, tmp_path):
+    from app.pipeline.stages import STAGE_RUNNERS
+
+    def boom(ctx):
+        raise ValueError("boom")
+
+    original = STAGE_RUNNERS[TS.PARSING]
+    STAGE_RUNNERS[TS.PARSING] = boom
+    try:
+        runner = PipelineRunner(build_mock_bundle(), data_root=tmp_path)
+        runner.run_until_pause(db_session, task)
+    finally:
+        STAGE_RUNNERS[TS.PARSING] = original
+    assert task.status == TS.FAILED
+    assert task.error_code == "INTERNAL"
 
 
 def test_illegal_state_rejected(db_session, task, tmp_path):
