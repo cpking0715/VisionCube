@@ -994,7 +994,10 @@ class LlmProvider(Protocol):
 
 
 class TtsProvider(Protocol):
-    def synthesize(self, text: str, voice_id: str | None, dest_dir: Path) -> TtsResult: ...
+    def synthesize(
+        self, text: str, voice_id: str | None, dest_dir: Path,
+        *, speed: float = 1.0, emotion: str | None = None,
+    ) -> TtsResult: ...
     def clone_voice(self, sample_path: Path, name: str) -> str:
         """上传参考音色样本，供应商侧克隆，返回 voice_id"""
         ...
@@ -1195,7 +1198,10 @@ class MockLlm:
 
 
 class MockTts:
-    def synthesize(self, text: str, voice_id: str | None, dest_dir: Path) -> TtsResult:
+    def synthesize(
+        self, text: str, voice_id: str | None, dest_dir: Path,
+        *, speed: float = 1.0, emotion: str | None = None,
+    ) -> TtsResult:
         dest_dir.mkdir(parents=True, exist_ok=True)
         audio = dest_dir / "voice.mp3"
         audio.write_bytes(b"MOCK-AUDIO-BYTES")
