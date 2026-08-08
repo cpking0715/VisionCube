@@ -227,7 +227,7 @@ settings = Settings()
 `app/core/database.py`:
 ```python
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from app.models.base import Base
 
@@ -285,7 +285,6 @@ Expected: PASS ×2
 `backend/tests/conftest.py`:
 ```python
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
