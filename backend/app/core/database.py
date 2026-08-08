@@ -21,7 +21,9 @@ def init_db(database_url: str):
     if database_url.startswith("sqlite"):
         db_path = make_url(database_url).database  # sqlite:///./data/x.db → "./data/x.db"
         if db_path and db_path != ":memory:":
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            parent = os.path.dirname(db_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
     engine = get_engine(database_url)
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
