@@ -86,7 +86,7 @@ ruff check app tests               # 静态检查，0 错误
 | 项 | 内容 |
 | --- | --- |
 | 操作 | 创建任务，`source_url` 填真实抖音分享链接 |
-| 预期结果 | 任务进入解析阶段，详情中生成 `source.mp4`（kind=`source` 的文件记录） |
+| 预期结果 | 任务进入解析阶段，详情中生成 `source.mp4`（kind=`source_video` 的文件记录） |
 | 验证要点 | 视频时长/分辨率与源视频一致；解析失败时任务 FAILED 且 `failed_stage` 指向解析阶段 |
 | 结果 | （待填充） |
 
@@ -104,7 +104,7 @@ ruff check app tests               # 静态检查，0 错误
 | 项 | 内容 |
 | --- | --- |
 | 操作 | 确认脚本后流水线执行 TTS 阶段 |
-| 预期结果 | 生成 `voice.mp3`（kind=`voice` 的文件记录），任务进入 REVIEW |
+| 预期结果 | 生成 `voice.mp3`（kind=`audio` 的文件记录），任务进入 REVIEW |
 | 验证要点 | 音频可播放、时长与脚本朗读时长近似；音色与 `voice_id` 一致 |
 | 结果 | （待填充） |
 
@@ -113,7 +113,7 @@ ruff check app tests               # 静态检查，0 错误
 | 项 | 内容 |
 | --- | --- |
 | 操作 | REVIEW 通过（complete）后检查合成阶段产物 |
-| 预期结果 | 生成 `avatar.mp4` 与 `final.mp4`（kind=`avatar`/`final`），任务 COMPLETED |
+| 预期结果 | 生成 `avatar.mp4` 与 `final.mp4`（kind=`avatar_video`/`final`），任务 COMPLETED |
 | 验证要点 | 数字人口型与音频同步；封面图 `cover_*.jpg` 生成；成品可正常播放 |
 | 结果 | （待填充） |
 

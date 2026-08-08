@@ -3082,7 +3082,7 @@ git commit -m "feat: minimal frontend with login, task list, detail and new-task
 **Files:**
 - Create: `backend/tests/test_e2e_mock_pipeline.py`, `docs/runbook.md`, `.github/workflows/ci.yml`
 
-- [ ] **Step 1: 写端到端集成测试（API 层完整业务流）**
+- [x] **Step 1: 写端到端集成测试（API 层完整业务流）**
 
 ```python
 from fastapi.testclient import TestClient
@@ -3124,16 +3124,16 @@ def test_full_business_flow_with_mock_providers(db_session, tmp_path, monkeypatc
     assert r3.json()["status"] == "COMPLETED"
 ```
 
-- [ ] **Step 2: 运行确认通过**
+- [x] **Step 2: 运行确认通过**
 
 Run: `pytest tests/test_e2e_mock_pipeline.py -v`
 Expected: PASS
 
-- [ ] **Step 3: 写 runbook**
+- [x] **Step 3: 写 runbook**
 
 `docs/runbook.md`：本地环境要求（Python 3.12 / Node 20 / FFmpeg / Redis）、启动步骤（seed_admin → uvicorn → arq worker → npm run dev）、真实 API 冒烟清单模板（阶段 2 填充：真实链接解析 / ASR / TTS / 数字人各一条）。
 
-- [ ] **Step 4: 写 CI**
+- [x] **Step 4: 写 CI**
 
 `.github/workflows/ci.yml`：
 
@@ -3152,7 +3152,7 @@ jobs:
       - run: .venv/bin/pytest -q
 ```
 
-- [ ] **Step 5: 全量回归 + 覆盖率抽检**
+- [x] **Step 5: 全量回归 + 覆盖率抽检**
 
 ```powershell
 cd backend
@@ -3162,13 +3162,22 @@ pytest --cov=app/pipeline --cov=app/providers --cov-report=term-missing -q
 ```
 Expected: 全部 PASS；pipeline/providers 覆盖率 >= 80%（不足则补测试）
 
-- [ ] **Step 6: Commit 并推送**
+- [x] **Step 6: Commit 并推送**
 
 ```powershell
 git add backend/tests/test_e2e_mock_pipeline.py docs/runbook.md .github
  git commit -m "test: e2e mock pipeline, runbook and CI workflow"
 git push
 ```
+
+实施提交 `3618b00`（test: e2e mock pipeline, runbook and CI workflow），push 成功（含此前全部本地提交）。质量审查 1 Important + 5 Minor + 1 可选优化，修复提交 `aa07017`（fix: correct runbook artifact path and harden e2e assertions）：
+- I1 runbook 产物路径 `{task_id}/{stage}/` → `{user_id}/{task_id}/`（与 runner.py 实际布局一致，无 stage 子目录）
+- M1 `_DATA_ROOT` 改用 monkeypatch.setattr 自动恢复；M2 r2/r3 补状态码 200 断言
+- M3 断言加深：scripts 显式非空 + REVIEW 时 files kind 覆盖 {source_video, audio, avatar_video, final, cover}（与 5 个 stage 注册点逐一核实）
+- M4 runbook 登录密码补 .env 覆盖提醒；M5 Node 版本精确为 >= 20.19（Vite 8 engines）
+- M6 ci.yml 加 concurrency 防 PR 双跑 + setup-uv enable-cache
+- 复审 APPROVED；验证：e2e 1 passed、全量 81 passed、ruff 0、覆盖率 pipeline 91% / providers 99%
+- 遗留 Minor 已顺手修正：runbook 冒烟模板 kind 示例 source→source_video、voice→audio、avatar→avatar_video
 
 ---
 
