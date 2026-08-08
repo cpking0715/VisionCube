@@ -4,9 +4,14 @@ import { listTasks, type TaskOut } from '../api'
 
 export default function TaskList() {
   const [tasks, setTasks] = useState<TaskOut[]>([])
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    const load = () => listTasks().then(setTasks).catch(() => {})
+    const load = () =>
+      listTasks().then((data) => {
+        setTasks(data)
+        setError('')
+      }).catch(() => setError('加载失败'))
     load()
     const timer = setInterval(load, 2000)
     return () => clearInterval(timer)
@@ -18,6 +23,7 @@ export default function TaskList() {
         <h1 className="text-xl font-bold">复刻任务</h1>
         <Link to="/new" className="rounded bg-blue-600 px-3 py-1 text-white">新建任务</Link>
       </div>
+      {error && <p className="mb-4 text-red-600 text-sm">{error}</p>}
       <table className="w-full border text-sm">
         <thead>
           <tr className="bg-gray-100 text-left">

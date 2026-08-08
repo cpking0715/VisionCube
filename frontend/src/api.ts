@@ -17,6 +17,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   })
+  if (res.status === 401) {
+    localStorage.removeItem('vc_token')
+    window.location.href = '/login'
+    throw new Error('401 未登录')
+  }
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
   return res.json()
 }
@@ -58,6 +63,14 @@ export const completeTask = (taskId: number) =>
 export const retryTask = (taskId: number) =>
   request<TaskOut>(`/api/tasks/${taskId}/retry`, { method: 'POST' })
 
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (star) return decodeURIComponent(star[1])
+  const plain = /filename="?([^";]+)"?/i.exec(header)
+  return plain ? plain[1] : fallback
+}
+
 // 带 token 下载（后端要求 Authorization 头，不能用 <a href> 直链）
 export async function downloadFile(fileId: number): Promise<void> {
   const res = await fetch(`/api/files/${fileId}/download`, {
@@ -68,7 +81,10 @@ export async function downloadFile(fileId: number): Promise<void> {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `visioncube-${fileId}`
+  const cd = res.headers.get('content-disposition')
+  a.download = filenameFromDisposition(cd, `visioncube-${fileId}`)
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
