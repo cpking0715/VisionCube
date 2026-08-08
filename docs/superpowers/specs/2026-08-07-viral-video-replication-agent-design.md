@@ -93,13 +93,13 @@ VisionCube/
 |---|---|---|
 | 解析 | `parse.py` | 链接校验 → `VideoParseProvider` 拉取元信息与视频直链 → 下载原视频到本地 |
 | ASR | `transcribe.py` | FFmpeg 抽取音频 → `AsrProvider` → 带时间戳逐句文案 |
-| 结构分析 | `analyze.py` | `LlmProvider` 拆解爆款结构：钩子/痛点/论据/转化结尾、语速、停顿、情绪风格；同时提取原视频话题标签（来自 parse 元信息） |
+| 结构分析 | `analyze.py` | `LlmProvider` 拆解爆款结构：钩子/痛点/论据/转化结尾、语速、停顿、情绪风格；同时提取原视频话题标签（来自 parse 元信息）与**场景切点**（FFmpeg scene detection + 文案语义分段） |
 | 改写 | `rewrite.py` | 输入三件套（原文案 + 结构分析 + 目标行业/产品信息），保留叙事骨架、跨行业迁移案例与论据，输出 1-3 版备选脚本，支持多语言参数 |
 | 标题话题生成 | `meta_generate.py` | 脚本确认后，`LlmProvider` 基于确认稿生成 3 套"标题 + 话题标签"方案供用户选择（即使人工发布也是必需物料） |
 | 文本审核 | `moderate_text.py` | 确认稿送 `ModerationProvider`；未过则携带违规点反馈自动回路重新改写（最多 2 次） |
 | TTS | `synthesize.py` | 确认稿 + 所选音色 → 语音 + 逐句时间戳 |
-| 数字人 | `avatar.py` | 音频 + 形象 + 背景素材（可选，默认平台场景）→ 提交驱动任务 → Arq 延时任务轮询 → 口播视频 |
-| 剪辑 | `compose.py` | ASS 字幕烧录（按 subtitle_style）+ BGM 混音（人声/BGM 音量配比）+ 9:16 MP4 输出 |
+| 数字人 | `avatar.py` | 音频 + 形象 + 背景素材 → 提交驱动任务 → Arq 延时任务轮询 → 口播视频；多场景配置时优先传平台分镜参数，不支持则按段落分段生成多段口播视频由 compose 拼接 |
+| 剪辑 | `compose.py` | 多段口播拼接（按 scene_config）+ ASS 字幕烧录（按 subtitle_style）+ BGM 混音（人声/BGM 音量配比）+ FFmpeg zoompan 运镜模拟（推近/平移）+ 9:16 MP4 输出 |
 | 封面生成 | `cover.py` | **3 种风格方案**（A 大字冲击型 / B 干净截帧型 / C 情绪渲染型），每种 FFmpeg 抽关键帧 × LLM 标题文案 → Pillow 合成 1-2 张，共 3-6 张候选；支持调参（标题文案/配色/文字位置）后重新生成 |
 | 成片审核 | `moderate_video.py` | 成片截帧 + 音轨送 `ModerationProvider`，通过才允许下载 |
 
@@ -177,7 +177,7 @@ PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
 ## 8. 数据模型（7 张表）
 
 - `users`：认证与基础信息
-- `tasks`：状态机主表。含 `status`、`failed_stage`、`source_url`、`target_industry`、`product_brief`、`subtitle_style`/`title_style`/`pip_config`(JSON)、`selected_cover`、语言/音色/形象选项、各阶段产物引用
+- `tasks`：状态机主表。含 `status`、`failed_stage`、`source_url`、`target_industry`、`product_brief`、`subtitle_style`/`title_style`/`pip_config`/`scene_config`(JSON)、`selected_cover`、语言/音色/形象选项、各阶段产物引用
 - `scripts`：多版本文案（原版 + 1-3 改写版 + 确认稿标记 + 整改轮次）
 - `publish_metas`：标题+话题方案（每任务 3 版，含选中标记），REVIEW 阶段选择；作为未来自动发布的物料，也随成片打包供人工发布使用
 - `assets`：数字人形象、音色、BGM、背景素材、画中画素材（kind 区分：avatar/voice/bgm/background/pip；source 区分：upload/openverse/pixabay/pexels/platform；背景与画中画分目录存储 `data/{user_id}/stocks/backgrounds/` 与 `.../pips/`）
@@ -252,3 +252,15 @@ PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
 4. **检索为交互 API 而非流水线阶段**：用户在新建任务向导中搜索关键词 → `GET /api/stocks/search` 返回候选 → 选中后下载缓存入 `assets`。
 
 实施节奏：阶段 1 落地 `StockProvider` 契约与 Mock、`assets` 分类字段、`background_asset_id`；真实检索实现（Openverse 优先，免 Key）随阶段 2 接入。
+
+## 16. v1.3 场景分段与动态感方案（2026-08-08）
+
+问题：原爆款视频中人物移动、背景随镜头变化；商用数字人 API 只能生成固定机位口播，无法逐帧复刻运镜与肢体动作。
+
+1. **场景分段换背景（核心手段）**：`analyze` 阶段输出 `scene_cuts`（FFmpeg 画面突变检测 + LLM 文案语义分段的时间戳列表）；脚本按段落打标，每段绑定背景素材与运镜方式，存 `tasks.scene_config`（`[{segment, background_asset_id, camera_move: none|zoom_in|pan}]`）。单一 `background_asset_id` 保留为全局默认回退。
+2. **分段生成与拼接**：avatar 阶段优先使用平台多场景分镜参数（部分供应商支持每段传背景）；不支持时按段落分段生成多段口播视频，compose 阶段拼接。
+3. **逐段自动检索素材**：参照 MoneyPrinterTurbo 蒙太奇机制——`analyze` 后 LLM 为每段文案生成检索关键词 → `StockProvider` 自动检索推荐背景素材入候选，用户在向导中可改。
+4. **运镜模拟**：compose 阶段用 FFmpeg `zoompan` 对数字人成片做缓慢推近/平移，模拟原片运镜，不依赖供应商能力。
+5. **肢体动作降级接受**：仅使用数字人平台动作库资产（带手势的形象），不做帧级复刻——该方案形态的固有取舍，与 §12 开源调研结论一致。
+
+实施节奏：阶段 1 预留 `scene_config` 字段（Mock 单段）；场景检测、逐段检索推荐、分段生成拼接与运镜滤镜随阶段 3（FFmpeg 剪辑期）落地。

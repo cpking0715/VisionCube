@@ -18,6 +18,7 @@
 - 前端 Vitest 组件测试随阶段 4（完整向导/字幕/封面交互）一并补齐；阶段 1 前端以手工联调验收
 - v1.1 优化落地范围：META_GENERATING 状态 + Mock 阶段 + publish_metas 表 + title_style/pip_config 字段 + clone_voice 契约；标题/封面选择交互、调参重生成、真实音色克隆随阶段 2-4 接入
 - v1.2 素材体系落地范围：StockProvider 契约与 Mock、assets 的 kind/source/path 字段、tasks.background_asset_id；真实素材检索 API（Openverse 优先）与素材上传管理交互随阶段 2 接入
+- v1.3 场景分段落地范围：tasks.scene_config 字段预留（Mock 单段）；场景检测、逐段检索推荐、分段生成拼接与 zoompan 运镜随阶段 3 接入
 
 ---
 
@@ -433,6 +434,7 @@ class Task(Base, TimestampMixin):
     subtitle_style: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     title_style: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     pip_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    scene_config: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{segment, background_asset_id, camera_move}]
     background_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
     selected_cover_id: Mapped[int | None] = mapped_column(
         ForeignKey("video_files.id"), nullable=True
@@ -1483,7 +1485,7 @@ def run(ctx) -> None:
         ensure_ascii=False), encoding="utf-8")
 ```
 
-`stages/analyze.py`：
+`stages/analyze.py`（v1.3：阶段 3 追加 scene_cuts 场景切点检测与逐段检索关键词输出）：
 
 ```python
 import json
@@ -1593,7 +1595,8 @@ from app.pipeline.stages._util import latest_file, register_file
 
 def run(ctx) -> None:
     audio = latest_file(ctx, "audio")
-    background = None  # v1.2：背景素材可选（平台场景/自建库/检索缓存）
+    background = None  # v1.2：背景素材可选（平台场景/自建库/检索缓存）；
+    # v1.3：scene_config 多段分镜与分段生成随阶段 3 接入
     if ctx.task.background_asset_id:
         asset = ctx.db.get(Asset, ctx.task.background_asset_id)
         background = Path(asset.path) if asset and asset.path else None
@@ -1621,7 +1624,8 @@ def run(ctx) -> None:
     final = ctx.task_dir / "final.mp4"
     shutil.copyfile(avatar_video, final)
     register_file(ctx, final, "final", "COMPOSING")
-    # 阶段 2 接入 FFmpeg：ASS 字幕烧录（subtitle_style）+ BGM 混音 + 9:16 输出
+    # 阶段 3 接入 FFmpeg：多段口播拼接（scene_config）+ ASS 字幕烧录（subtitle_style）
+    # + BGM 混音 + zoompan 运镜模拟 + 9:16 输出
 ```
 
 `stages/cover.py`（阶段 1 Mock：写占位封面文件；阶段 3 按 3 种风格方案实现）：
@@ -2264,6 +2268,7 @@ class TaskCreate(BaseModel):
     subtitle_style: dict | None = None
     title_style: dict | None = None
     pip_config: dict | None = None
+    scene_config: list | None = None
 
 
 class ScriptConfirm(BaseModel):
@@ -2296,7 +2301,8 @@ def create_task(body: TaskCreate, bg: BackgroundTasks,
                 language=body.language, voice_id=body.voice_id, avatar_id=body.avatar_id,
                 background_asset_id=body.background_asset_id,
                 subtitle_style=body.subtitle_style, title_style=body.title_style,
-                pip_config=body.pip_config, status=TaskStatus.PENDING)
+                pip_config=body.pip_config, scene_config=body.scene_config,
+                status=TaskStatus.PENDING)
     db.add(task)
     db.commit()
     db.refresh(task)
