@@ -11,7 +11,7 @@ from app.models.user import User
 
 
 @pytest.fixture()
-def client_and_user(db_session, tmp_path):
+def client_and_user(db_session, tmp_path, monkeypatch):
     user = User(username="admin", hashed_password="x")
     db_session.add(user)
     db_session.commit()
@@ -21,7 +21,7 @@ def client_and_user(db_session, tmp_path):
     app.dependency_overrides[get_current_user] = lambda: user
 
     from app.api import tasks as tasks_api
-    tasks_api._DATA_ROOT = tmp_path  # 测试注入存储根目录
+    monkeypatch.setattr(tasks_api, "_DATA_ROOT", tmp_path)  # 测试注入存储根目录
 
     return TestClient(app), user
 
@@ -158,3 +158,59 @@ def test_retry_missing_failed_stage_409(client_and_user, db_session):
     db_session.commit()
     r2 = client.post(f"/api/tasks/{task_id}/retry")
     assert r2.status_code == 409
+
+
+@pytest.mark.parametrize("source_url", [
+    "ftp://v.douyin.com/x",
+    "v.douyin.com/x",
+])
+def test_create_task_invalid_source_url_422(client_and_user, source_url):
+    """F1: source_url 非 http(s) 开头 → 422。"""
+    client, _ = client_and_user
+    r = client.post("/api/tasks", json={"source_url": source_url})
+    assert r.status_code == 422
+
+
+def test_create_task_source_url_too_long_422(client_and_user):
+    """F1: source_url 超 2048 字符 → 422。"""
+    client, _ = client_and_user
+    r = client.post("/api/tasks",
+                    json={"source_url": "https://v.douyin.com/" + "a" * 2048})
+    assert r.status_code == 422
+
+
+def test_retry_resumes_from_failed_stage(client_and_user, db_session, monkeypatch):
+    """M-2: API 层重试从失败阶段继续——注入 MODERATING_VIDEO 失败 → retry 越过注入阶段到 REVIEW。"""
+    from app.core.exceptions import RecoverablePipelineError
+    from app.pipeline.stages import STAGE_RUNNERS
+
+    def boom(ctx):
+        raise RecoverablePipelineError("VIDEO_MODERATION_FAILED", "注入失败")
+
+    client, _ = client_and_user
+    token = create_access_token("admin")
+    r = client.post("/api/tasks", json={"source_url": "https://v.douyin.com/x"},
+                    headers={"Authorization": f"Bearer {token}"})
+    task_id = r.json()["id"]
+    assert r.json()["status"] == TS.AWAITING_SCRIPT.value
+    script = db_session.query(Script).filter_by(task_id=task_id).first()
+
+    # 注入 MODERATING_VIDEO 失败：确认脚本后流水线在该阶段 FAILED
+    original = STAGE_RUNNERS[TS.MODERATING_VIDEO]
+    monkeypatch.setitem(STAGE_RUNNERS, TS.MODERATING_VIDEO, boom)
+    r2 = client.post(f"/api/tasks/{task_id}/confirm-script", json={"script_id": script.id},
+                     headers={"Authorization": f"Bearer {token}"})
+    assert r2.status_code == 200
+    assert r2.json()["status"] == TS.FAILED.value
+    assert r2.json()["failed_stage"] == TS.MODERATING_VIDEO.value
+
+    # 恢复注入后 retry：从失败阶段重新进入流水线并越过注入阶段
+    monkeypatch.setitem(STAGE_RUNNERS, TS.MODERATING_VIDEO, original)
+    r3 = client.post(f"/api/tasks/{task_id}/retry",
+                     headers={"Authorization": f"Bearer {token}"})
+    assert r3.status_code == 200
+    assert r3.json()["status"] == TS.REVIEW.value
+
+    r4 = client.post(f"/api/tasks/{task_id}/complete",
+                     headers={"Authorization": f"Bearer {token}"})
+    assert r4.json()["status"] == TS.COMPLETED.value

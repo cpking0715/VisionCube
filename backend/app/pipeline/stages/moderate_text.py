@@ -9,6 +9,6 @@ def run(ctx) -> None:
         raise RecoverablePipelineError("NO_CONFIRMED_SCRIPT", "缺少已确认脚本")
     result = ctx.bundle.moderation.moderate_text(final.content)
     if not result.passed:
-        # 整改回路由 runner/API 层处理；此处抛出供其捕获
+        # 整改回路（TEXT_MODERATION_FAILED → REWRITING）阶段 2 接入
         raise RecoverablePipelineError(
             "TEXT_MODERATION_FAILED", "；".join(result.violations) or "文本审核未通过")

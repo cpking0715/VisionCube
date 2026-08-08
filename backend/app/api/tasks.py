@@ -7,7 +7,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -50,6 +50,15 @@ def _run_now(task_id: int) -> None:
 class TaskCreate(BaseModel):
     source_url: str
     target_industry: str | None = None
+
+    @field_validator("source_url")
+    @classmethod
+    def check_source_url(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("source_url must start with http:// or https://")
+        if len(v) > 2048:
+            raise ValueError("source_url must be at most 2048 characters")
+        return v
     product_brief: str | None = None
     language: str = "zh"
     voice_id: str | None = None

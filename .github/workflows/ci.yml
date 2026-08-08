@@ -15,3 +15,4 @@ jobs:
       - run: uv venv .venv && uv pip install -e ".[dev]"
       - run: .venv/bin/ruff check app tests
       - run: .venv/bin/pytest -q
+      - run: .venv/bin/pytest --cov=app/pipeline --cov=app/providers --cov-fail-under=80 -q
