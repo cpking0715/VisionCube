@@ -2124,9 +2124,11 @@ Expected: FAIL
 
 - [ ] **Step 3: 实现**
 
-`app/api/deps.py`：
+`app/api/deps.py`（注：依赖注入用 Annotated 写法而非 `Depends()` 默认值——ruff 默认规则集含 B008，`Depends()` 作参数默认值会报错；二者语义等价，dependency_overrides 按函数对象注入不受影响）：
 
 ```python
+from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -2137,26 +2139,36 @@ from app.models.user import User
 
 bearer = HTTPBearer(auto_error=False)
 
+# 401 响应统一携带 RFC 6750 要求的 WWW-Authenticate 头，提示客户端使用 Bearer 方案
+_WWW_AUTH = {"WWW-Authenticate": "Bearer"}
+
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-    db: Session = Depends(get_db),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    db: Annotated[Session, Depends(get_db)],
 ) -> User:
+    """校验 Bearer token 并返回当前用户。"""
     if credentials is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing token")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing token", headers=_WWW_AUTH)
     try:
         payload = decode_token(credentials.credentials)
     except ValueError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
-    user = db.query(User).filter_by(username=payload["sub"]).first()
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token", headers=_WWW_AUTH)
+    sub = payload.get("sub")
+    if sub is None:
+        # 签名有效但缺 sub claim：视为非法 token，而非 500
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token", headers=_WWW_AUTH)
+    user = db.query(User).filter_by(username=sub).first()
     if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found", headers=_WWW_AUTH)
     return user
 ```
 
-`app/api/auth.py`：
+`app/api/auth.py`（用户不存在时也执行一次 bcrypt 验证抹平时序防用户名枚举；_DUMMY_HASH 用固定字面量避免 import 时跑 bcrypt 拖慢测试收集）：
 
 ```python
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -2164,22 +2176,32 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import create_access_token, verify_password
 from app.models.user import User
+from app.schemas.auth import Token
 
 router = APIRouter()
 
+_DUMMY_HASH = "$2b$12$lLLZrtPouWj6ESWWWjT1Uuu92X9cof20ZkqiJWd5k4KSHISF7ZUrK"
 
-@router.post("/login")
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+
+@router.post("/login", response_model=Token)
+def login(
+    form: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Annotated[Session, Depends(get_db)],
+) -> Token:
+    """用户名密码登录，返回 JWT access token。"""
     user = db.query(User).filter_by(username=form.username).first()
-    if user is None or not verify_password(form.password, user.hashed_password):
+    if user is None:
+        verify_password(form.password, _DUMMY_HASH)  # 抹平时序，防用户名枚举
         raise HTTPException(401, "incorrect credentials")
-    return {"access_token": create_access_token(user.username), "token_type": "bearer"}
+    if not verify_password(form.password, user.hashed_password):
+        raise HTTPException(401, "incorrect credentials")
+    return Token(access_token=create_access_token(user.username), token_type="bearer")
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `pytest tests/test_api_auth.py -v`
-Expected: PASS ×2
+Expected: PASS ×2（另含 4 个认证依赖边界测试：missing/invalid/缺 sub claim/用户不存在 → 401 断言，全量 64 passed）
 
 - [ ] **Step 5: Commit**
 
