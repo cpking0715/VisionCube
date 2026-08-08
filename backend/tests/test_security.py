@@ -18,3 +18,8 @@ def test_token_roundtrip():
 def test_decode_invalid_token():
     with pytest.raises(ValueError):
         decode_token("garbage.token.value")
+
+
+def test_decode_none_token():
+    with pytest.raises(ValueError):
+        decode_token(None)

@@ -24,6 +24,8 @@ def create_access_token(subject: str) -> str:
 
 
 def decode_token(token: str) -> dict:
+    if not token:
+        raise ValueError("invalid token")
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
