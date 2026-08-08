@@ -2562,6 +2562,9 @@ Expected: FAIL
 `app/api/files.py`：
 
 ```python
+import os
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -2575,13 +2578,21 @@ router = APIRouter()
 
 
 @router.get("/{file_id}/download")
-def download(file_id: int, db: Session = Depends(get_db),
-             user: User = Depends(get_current_user)):
+def download(
+    file_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """下载文件；仅限文件所属用户，越权一律 404（不泄露存在性）。"""
     vf = db.get(VideoFile, file_id)
     if vf is None or vf.user_id != user.id:
         raise HTTPException(404, "file not found")
-    return FileResponse(vf.path, filename=vf.path.split("/")[-1].split("\\")[-1])
+    if not os.path.isfile(vf.path):
+        raise HTTPException(404, "file not found")  # 磁盘文件缺失与越权同语义
+    return FileResponse(vf.path, filename=os.path.basename(vf.path))
 ```
+
+（注：`init_db` 已加 sqlite 父目录自动创建——用 `make_url(database_url).database` 解析路径，空路径/`:memory:` 跳过，防止全新环境 data 目录缺失导致 seed_admin/uvicorn 双入口启动失败。）
 
 `app/main.py`：
 
@@ -2635,7 +2646,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: 运行测试确认通过 + 全量回归**
 
 Run: `pytest -q`
-Expected: 全部 PASS
+Expected: 全部 PASS（另含 2 个边界测试：init_db 自动建 sqlite 父目录、磁盘文件缺失下载 404，全量 80 passed）
 
 - [ ] **Step 5: 手工验证应用启动**
 
