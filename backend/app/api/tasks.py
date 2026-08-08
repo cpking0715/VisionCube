@@ -20,6 +20,7 @@ from app.models.task import Task, TaskStatus
 from app.models.user import User
 from app.models.video_file import VideoFile
 from app.pipeline.runner import PipelineRunner
+from app.pipeline.state_machine import assert_transition
 from app.providers.registry import build_mock_bundle
 
 router = APIRouter()
@@ -97,7 +98,7 @@ def create_task(body: TaskCreate, bg: BackgroundTasks,
     db.add(task)
     db.commit()
     db.refresh(task)
-    _run_now(task.id)  # 阶段 1 内联执行；阶段 2 换 Arq 入队
+    _run_now(task.id)  # 阶段 1 内联执行；阶段 2 换 Arq 入队（bg.add_task 形状保持）
     db.refresh(task)
     return _task_out(task)
 
@@ -140,9 +141,10 @@ def confirm_script(task_id: int, body: ScriptConfirm, bg: BackgroundTasks,
     if body.content:
         script.content = body.content
     script.is_confirmed = True
+    assert_transition(task.status, TaskStatus.META_GENERATING)  # 状态机边校验
     task.status = TaskStatus.META_GENERATING
     db.commit()
-    _run_now(task.id)
+    _run_now(task.id)  # 阶段 2 换 Arq 入队（bg.add_task 形状保持）
     db.refresh(task)
     return _task_out(task)
 
@@ -155,11 +157,13 @@ def retry_task(task_id: int, bg: BackgroundTasks,
     task = _get_task_or_404(db, task_id, user)
     if task.status != TaskStatus.FAILED:
         raise HTTPException(409, "task not failed")
-    task.status = TaskStatus(task.failed_stage)  # 回到失败阶段重试
+    if not task.failed_stage:
+        raise HTTPException(409, "task missing failed_stage")
+    task.status = TaskStatus(task.failed_stage)  # 回到失败阶段重试（FAILED 无出边，不走状态机校验）
     task.error_code = None
     task.error_message = None
     db.commit()
-    _run_now(task.id)
+    _run_now(task.id)  # 阶段 2 换 Arq 入队（bg.add_task 形状保持）
     db.refresh(task)
     return _task_out(task)
 
