@@ -2329,6 +2329,7 @@ from app.models.task import Task, TaskStatus
 from app.models.user import User
 from app.models.video_file import VideoFile
 from app.pipeline.runner import PipelineRunner
+from app.pipeline.state_machine import assert_transition
 from app.providers.registry import build_mock_bundle
 
 router = APIRouter()
@@ -2439,6 +2440,7 @@ def confirm_script(task_id: int, body: ScriptConfirm, bg: BackgroundTasks,
     if body.content:
         script.content = body.content
     script.is_confirmed = True
+    assert_transition(task.status, TaskStatus.META_GENERATING)  # 状态机统一入口（409 守卫已保证 src）
     task.status = TaskStatus.META_GENERATING
     db.commit()
     _run_now(task.id)
@@ -2452,7 +2454,9 @@ def retry_task(task_id: int, bg: BackgroundTasks,
     task = _get_task_or_404(db, task_id, user)
     if task.status != TaskStatus.FAILED:
         raise HTTPException(409, "task not failed")
-    task.status = TaskStatus(task.failed_stage)  # 回到失败阶段重试
+    if not task.failed_stage:
+        raise HTTPException(409, "task missing failed_stage")  # 防御：None → ValueError 500
+    task.status = TaskStatus(task.failed_stage)  # 回到失败阶段重试（FAILED 无出边，不走状态机校验）
     task.error_code = None
     task.error_message = None
     db.commit()
@@ -2477,7 +2481,7 @@ def complete_task(task_id: int, db: Session = Depends(get_db),
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `pytest tests/test_api_tasks.py -v`
-Expected: PASS ×4
+Expected: PASS ×4（另含 4 个边界测试：跨用户隔离 404、不存在任务 404、双向 409、get_task 结构，全量 75 passed）
 
 - [ ] **Step 5: 全量回归**
 
