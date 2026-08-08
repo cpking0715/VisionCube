@@ -1,5 +1,6 @@
 """文件下载端点：下载当前用户任务产物文件。"""
 
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,4 +25,6 @@ def download(
     vf = db.get(VideoFile, file_id)
     if vf is None or vf.user_id != user.id:
         raise HTTPException(404, "file not found")
-    return FileResponse(vf.path, filename=vf.path.split("/")[-1].split("\\")[-1])
+    if not os.path.isfile(vf.path):
+        raise HTTPException(404, "file not found")
+    return FileResponse(vf.path, filename=os.path.basename(vf.path))

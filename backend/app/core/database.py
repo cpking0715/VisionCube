@@ -1,4 +1,7 @@
+import os
+
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.models.base import Base
@@ -15,6 +18,10 @@ SessionLocal = None
 
 def init_db(database_url: str):
     global engine, SessionLocal
+    if database_url.startswith("sqlite"):
+        db_path = make_url(database_url).database  # sqlite:///./data/x.db → "./data/x.db"
+        if db_path and db_path != ":memory:":
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
     engine = get_engine(database_url)
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

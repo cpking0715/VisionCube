@@ -41,3 +41,18 @@ def test_download_other_user_file_denied(db_session, tmp_path):
     app.dependency_overrides[get_current_user] = lambda: other
     client = TestClient(app)
     assert client.get(f"/api/files/{vf.id}/download").status_code == 404
+
+
+def test_download_missing_file_404(db_session, tmp_path):
+    user = User(username="admin", hashed_password="x")
+    db_session.add(user)
+    db_session.flush()
+    vf = VideoFile(user_id=user.id, kind="final", path=str(tmp_path / "missing.mp4"))
+    db_session.add(vf)
+    db_session.commit()
+
+    app = FastAPI()
+    app.include_router(files_router, prefix="/api/files")
+    app.dependency_overrides[get_current_user] = lambda: user
+    client = TestClient(app)
+    assert client.get(f"/api/files/{vf.id}/download").status_code == 404
