@@ -119,7 +119,8 @@ export default function TaskDetail() {
             {task.files.filter((f) => ['final', 'cover'].includes(f.kind)).map((f) => (
               <li key={f.id}>
                 <button className="text-blue-600 underline"
-                  onClick={() => downloadFile(f.id)}>
+                  onClick={() => downloadFile(f.id)
+                    .catch(() => setActionError('下载失败，请重试'))}>
                   {f.kind === 'final' ? '成片 MP4' : `封面 ${f.id}`}
                 </button>
               </li>

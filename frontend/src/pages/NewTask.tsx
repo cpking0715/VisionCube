@@ -7,10 +7,12 @@ export default function NewTask() {
   const [industry, setIndustry] = useState('')
   const [brief, setBrief] = useState('')
   const [error, setError] = useState('')
+  const [pending, setPending] = useState(false)
   const nav = useNavigate()
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    setPending(true)
     try {
       const task = await createTask({
         source_url: sourceUrl,
@@ -20,6 +22,8 @@ export default function NewTask() {
       nav(`/tasks/${task.id}`)
     } catch (err) {
       setError(String(err))
+    } finally {
+      setPending(false)
     }
   }
 
@@ -33,7 +37,8 @@ export default function NewTask() {
       <textarea className="rounded border p-2" rows={3} placeholder="产品卖点描述（可选）"
         value={brief} onChange={(e) => setBrief(e.target.value)} />
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button className="rounded bg-blue-600 p-2 text-white">提交</button>
+      <button disabled={pending}
+        className="rounded bg-blue-600 p-2 text-white disabled:opacity-50">提交</button>
     </form>
   )
 }
