@@ -1472,6 +1472,16 @@ def latest_file(ctx, kind: str) -> Path | None:
           .filter_by(task_id=ctx.task.id, kind=kind)
           .order_by(VideoFile.id.desc()).first())
     return Path(vf.path) if vf else None
+
+
+def require_file(ctx, kind: str, code: str, message: str) -> Path:
+    """获取指定 kind 的最新产物；缺失时抛可恢复错误（与错误分级体系一致）。"""
+    from app.core.exceptions import RecoverablePipelineError
+
+    path = latest_file(ctx, kind)
+    if path is None:
+        raise RecoverablePipelineError(code, message)
+    return path
 ```
 
 `stages/parse.py`：
@@ -1492,11 +1502,11 @@ def run(ctx) -> None:
 ```python
 import json
 
-from app.pipeline.stages._util import latest_file
+from app.pipeline.stages._util import require_file
 
 
 def run(ctx) -> None:
-    source = latest_file(ctx, "source_video")
+    source = require_file(ctx, "source_video", "NO_SOURCE_VIDEO", "缺少源视频")
     sentences = ctx.bundle.asr.transcribe(source)
     out = ctx.task_dir / "transcript.json"
     out.write_text(json.dumps(
@@ -1507,11 +1517,14 @@ def run(ctx) -> None:
 `stages/analyze.py`（v1.3：阶段 3 追加 scene_cuts 场景切点检测与逐段检索关键词输出）：
 
 ```python
-import json
+from app.core.exceptions import RecoverablePipelineError
 
 
 def run(ctx) -> None:
-    transcript = (ctx.task_dir / "transcript.json").read_text(encoding="utf-8")
+    transcript_path = ctx.task_dir / "transcript.json"
+    if not transcript_path.exists():
+        raise RecoverablePipelineError("NO_TRANSCRIPT", "缺少转写结果")
+    transcript = transcript_path.read_text(encoding="utf-8")
     prompt = f"请分析以下爆款短视频文案的爆款结构：\n{transcript}"
     raw = ctx.bundle.llm.complete(prompt, json_mode=True)
     (ctx.task_dir / "structure.json").write_text(raw, encoding="utf-8")
@@ -1547,6 +1560,7 @@ def run(ctx) -> None:
 ```python
 import json
 
+from app.core.exceptions import RecoverablePipelineError
 from app.models.publish_meta import PublishMeta
 from app.models.script import Script
 
@@ -1555,6 +1569,8 @@ def run(ctx) -> None:
     final = (ctx.db.query(Script)
              .filter_by(task_id=ctx.task.id, is_confirmed=True)
              .order_by(Script.id.desc()).first())
+    if final is None:
+        raise RecoverablePipelineError("NO_CONFIRMED_SCRIPT", "缺少已确认脚本")
     prompt = (f"基于以下确认脚本，生成标题与话题：\n{final.content}\n"
               f"输出 JSON：{{\"options\": [{{\"title\": \"...\", "
               f"\"hashtags\": [\"#...\"]}}]}}，共 3 套")
@@ -1588,14 +1604,18 @@ def run(ctx) -> None:
 `stages/synthesize.py`：
 
 ```python
+import json
+
+from app.core.exceptions import RecoverablePipelineError
 from app.models.script import Script
 from app.pipeline.stages._util import register_file
-import json
 
 
 def run(ctx) -> None:
     final = ctx.db.query(Script).filter_by(
         task_id=ctx.task.id, is_confirmed=True).order_by(Script.id.desc()).first()
+    if final is None:
+        raise RecoverablePipelineError("NO_CONFIRMED_SCRIPT", "缺少已确认脚本")
     tts = ctx.bundle.tts.synthesize(final.content, ctx.task.voice_id, ctx.task_dir)
     register_file(ctx, tts.audio_path, "audio", "SYNTHESIZING")
     (ctx.task_dir / "tts_sentences.json").write_text(json.dumps(
@@ -1608,12 +1628,13 @@ def run(ctx) -> None:
 ```python
 from pathlib import Path
 
+from app.core.exceptions import RecoverablePipelineError
 from app.models.asset import Asset
-from app.pipeline.stages._util import latest_file, register_file
+from app.pipeline.stages._util import require_file, register_file
 
 
 def run(ctx) -> None:
-    audio = latest_file(ctx, "audio")
+    audio = require_file(ctx, "audio", "NO_AUDIO", "缺少配音")
     background = None  # v1.2：背景素材可选（平台场景/自建库/检索缓存）；
     # v1.3：scene_config 多段分镜与分段生成随阶段 3 接入
     if ctx.task.background_asset_id:
@@ -1623,7 +1644,7 @@ def run(ctx) -> None:
     # Mock 下一次 poll 即完成；真实实现由 worker 延时轮询
     job = ctx.bundle.digital_human.poll(job, ctx.task_dir)
     if not job.finished or job.video_path is None:
-        raise RuntimeError("avatar job not finished")  # runner 捕获转可恢复错误
+        raise RecoverablePipelineError("AVATAR_JOB_FAILED", "数字人任务未完成")
     register_file(ctx, job.video_path, "avatar_video", "GENERATING_AVATAR")
 ```
 
@@ -1632,14 +1653,11 @@ def run(ctx) -> None:
 ```python
 import shutil
 
-from app.core.exceptions import RecoverablePipelineError
-from app.pipeline.stages._util import latest_file, register_file
+from app.pipeline.stages._util import register_file, require_file
 
 
 def run(ctx) -> None:
-    avatar_video = latest_file(ctx, "avatar_video")
-    if avatar_video is None:
-        raise RecoverablePipelineError("NO_AVATAR_VIDEO", "缺少数字人视频")
+    avatar_video = require_file(ctx, "avatar_video", "NO_AVATAR_VIDEO", "缺少数字人视频")
     final = ctx.task_dir / "final.mp4"
     shutil.copyfile(avatar_video, final)
     register_file(ctx, final, "final", "COMPOSING")
@@ -1650,14 +1668,11 @@ def run(ctx) -> None:
 `stages/cover.py`（阶段 1 Mock：写占位封面文件；阶段 3 按 3 种风格方案实现）：
 
 ```python
-from app.pipeline.stages._util import latest_file, register_file
+from app.pipeline.stages._util import register_file, require_file
 
 
 def run(ctx) -> None:
-    final_video = latest_file(ctx, "final")
-    if final_video is None:
-        from app.core.exceptions import RecoverablePipelineError
-        raise RecoverablePipelineError("NO_FINAL_VIDEO", "缺少成片")
+    require_file(ctx, "final", "NO_FINAL_VIDEO", "缺少成片")
     for i in range(3):
         cover = ctx.task_dir / f"cover_{i}.jpg"
         cover.write_bytes(b"MOCK-COVER")
@@ -1670,11 +1685,11 @@ def run(ctx) -> None:
 
 ```python
 from app.core.exceptions import RecoverablePipelineError
-from app.pipeline.stages._util import latest_file
+from app.pipeline.stages._util import require_file
 
 
 def run(ctx) -> None:
-    final_video = latest_file(ctx, "final")
+    final_video = require_file(ctx, "final", "NO_FINAL_VIDEO", "缺少成片")
     result = ctx.bundle.moderation.moderate_video(final_video)
     if not result.passed:
         raise RecoverablePipelineError(
