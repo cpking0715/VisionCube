@@ -1,11 +1,8 @@
-from app.pipeline.stages._util import latest_file, register_file
+from app.pipeline.stages._util import register_file, require_file
 
 
 def run(ctx) -> None:
-    final_video = latest_file(ctx, "final")
-    if final_video is None:
-        from app.core.exceptions import RecoverablePipelineError
-        raise RecoverablePipelineError("NO_FINAL_VIDEO", "缺少成片")
+    require_file(ctx, "final", "NO_FINAL_VIDEO", "缺少成片")  # 前置检查：成片存在
     for i in range(3):
         cover = ctx.task_dir / f"cover_{i}.jpg"
         cover.write_bytes(b"MOCK-COVER")

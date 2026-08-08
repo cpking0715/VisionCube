@@ -1,13 +1,10 @@
 import shutil
 
-from app.core.exceptions import RecoverablePipelineError
-from app.pipeline.stages._util import latest_file, register_file
+from app.pipeline.stages._util import register_file, require_file
 
 
 def run(ctx) -> None:
-    avatar_video = latest_file(ctx, "avatar_video")
-    if avatar_video is None:
-        raise RecoverablePipelineError("NO_AVATAR_VIDEO", "缺少数字人视频")
+    avatar_video = require_file(ctx, "avatar_video", "NO_AVATAR_VIDEO", "缺少数字人视频")
     final = ctx.task_dir / "final.mp4"
     shutil.copyfile(avatar_video, final)
     register_file(ctx, final, "final", "COMPOSING")

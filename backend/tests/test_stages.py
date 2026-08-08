@@ -66,3 +66,13 @@ def test_full_mock_chain_produces_final_and_covers(ctx):
     from app.models.publish_meta import PublishMeta
     metas = ctx.db.query(PublishMeta).filter_by(task_id=ctx.task.id).all()
     assert len(metas) == 3
+
+
+def test_stage_missing_prerequisite_raises_recoverable(ctx):
+    from app.core.exceptions import RecoverablePipelineError
+    with pytest.raises(RecoverablePipelineError):
+        STAGE_RUNNERS[TS.TRANSCRIBING](ctx)  # 无 source_video
+    with pytest.raises(RecoverablePipelineError):
+        STAGE_RUNNERS[TS.COMPOSING](ctx)     # 无 avatar_video
+    with pytest.raises(RecoverablePipelineError):
+        STAGE_RUNNERS[TS.GENERATING_COVER](ctx)  # 无 final

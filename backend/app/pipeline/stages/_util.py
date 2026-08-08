@@ -20,3 +20,13 @@ def latest_file(ctx, kind: str) -> Path | None:
           .filter_by(task_id=ctx.task.id, kind=kind)
           .order_by(VideoFile.id.desc()).first())
     return Path(vf.path) if vf else None
+
+
+def require_file(ctx, kind: str, code: str, message: str) -> Path:
+    """获取指定 kind 的最新产物；缺失时抛可恢复错误（与错误分级体系一致）。"""
+    from app.core.exceptions import RecoverablePipelineError
+
+    path = latest_file(ctx, kind)
+    if path is None:
+        raise RecoverablePipelineError(code, message)
+    return path

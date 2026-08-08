@@ -1,9 +1,9 @@
 from app.core.exceptions import RecoverablePipelineError
-from app.pipeline.stages._util import latest_file
+from app.pipeline.stages._util import require_file
 
 
 def run(ctx) -> None:
-    final_video = latest_file(ctx, "final")
+    final_video = require_file(ctx, "final", "NO_FINAL_VIDEO", "缺少成片")
     result = ctx.bundle.moderation.moderate_video(final_video)
     if not result.passed:
         raise RecoverablePipelineError(
