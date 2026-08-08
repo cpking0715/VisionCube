@@ -17,6 +17,7 @@
 - SSE 进度推送延后到阶段 2；阶段 1 前端用 2 秒轮询（单用户场景足够）
 - 前端 Vitest 组件测试随阶段 4（完整向导/字幕/封面交互）一并补齐；阶段 1 前端以手工联调验收
 - v1.1 优化落地范围：META_GENERATING 状态 + Mock 阶段 + publish_metas 表 + title_style/pip_config 字段 + clone_voice 契约；标题/封面选择交互、调参重生成、真实音色克隆随阶段 2-4 接入
+- v1.2 素材体系落地范围：StockProvider 契约与 Mock、assets 的 kind/source/path 字段、tasks.background_asset_id；真实素材检索 API（Openverse 优先）与素材上传管理交互随阶段 2 接入
 
 ---
 
@@ -432,6 +433,7 @@ class Task(Base, TimestampMixin):
     subtitle_style: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     title_style: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     pip_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    background_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
     selected_cover_id: Mapped[int | None] = mapped_column(
         ForeignKey("video_files.id"), nullable=True
     )
@@ -490,9 +492,11 @@ class Asset(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(16))  # avatar | voice | bgm
+    kind: Mapped[str] = mapped_column(String(16))  # avatar|voice|bgm|background|pip
+    source: Mapped[str] = mapped_column(String(16), default="upload")  # upload|platform|openverse|pixabay|pexels
     name: Mapped[str] = mapped_column(String(128))
-    provider_ref: Mapped[str] = mapped_column(String(128))  # 供应商侧资产 ID
+    provider_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)  # 供应商侧资产 ID
+    path: Mapped[str | None] = mapped_column(String(512), nullable=True)  # 本地文件，背景/画中画分目录存储
 ```
 
 `app/models/video_file.py`:
@@ -878,9 +882,16 @@ from app.providers.base import (
     ModerationProvider,
     ParseResult,
     Sentence,
+    StockItem,
+    StockProvider,
     TtsProvider,
     VideoParseProvider,
 )
+
+
+def test_stock_item_shape():
+    item = StockItem(url="u", thumb_url="t", source="openverse", license="cc0", author="a")
+    assert item.source == "openverse" and item.license == "cc0"
 
 
 def test_parse_result_shape():
@@ -987,13 +998,28 @@ class TtsProvider(Protocol):
 
 
 class DigitalHumanProvider(Protocol):
-    def submit(self, audio_path: Path, avatar_id: str | None) -> AvatarJob: ...
+    def submit(self, audio_path: Path, avatar_id: str | None,
+               background: Path | None = None) -> AvatarJob: ...
     def poll(self, job: AvatarJob, dest_dir: Path) -> AvatarJob: ...
 
 
 class ModerationProvider(Protocol):
     def moderate_text(self, text: str) -> ModerationResult: ...
     def moderate_video(self, video_path: Path) -> ModerationResult: ...
+
+
+@dataclass
+class StockItem:
+    url: str
+    thumb_url: str
+    source: str        # openverse | pixabay | pexels
+    license: str       # cc0 / pexels-license 等，入库前需验证可商用
+    author: str
+
+
+class StockProvider(Protocol):
+    def search(self, keyword: str, limit: int = 6) -> list[StockItem]: ...
+    def download(self, item: StockItem, dest_dir: Path) -> Path: ...
 ```
 
 同时在 `base.py` 末尾附一个最小 `MockAsr`（仅为测试 protocol 断言）：
@@ -1007,7 +1033,7 @@ class MockAsr:
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `pytest tests/test_providers_base.py -v`
-Expected: PASS ×4
+Expected: PASS ×5
 
 - [ ] **Step 5: Commit**
 
@@ -1073,6 +1099,14 @@ def test_mock_tts_clone_voice(tmp_path):
     assert MockTts().clone_voice(sample, "我的音色") == "mock-voice-1"
 
 
+def test_mock_stock_search_and_download(tmp_path):
+    s = MockStock()
+    items = s.search("办公室", limit=3)
+    assert len(items) == 3 and items[0].url
+    f = s.download(items[0], tmp_path / "backgrounds")
+    assert f.exists()
+
+
 def test_mock_digital_human_submit_then_poll(tmp_path):
     dh = MockDigitalHuman()
     job = dh.submit(tmp_path / "a.mp3", None)
@@ -1105,7 +1139,7 @@ import shutil
 from pathlib import Path
 
 from app.providers.base import (
-    AvatarJob, ModerationResult, ParseResult, Sentence, TtsResult,
+    AvatarJob, ModerationResult, ParseResult, Sentence, StockItem, TtsResult,
 )
 
 _SAMPLE_SCRIPT = "你知道吗，这个问题困扰了百分之九十的人。其实解决方案很简单。第一步，明确目标。第二步，立即行动。现在就试试吧。"
@@ -1173,8 +1207,23 @@ class MockTts:
         return "mock-voice-1"
 
 
+class MockStock:
+    def search(self, keyword: str, limit: int = 6) -> list[StockItem]:
+        return [StockItem(url=f"https://example.com/{keyword}-{i}.jpg",
+                          thumb_url=f"https://example.com/{keyword}-{i}_t.jpg",
+                          source="mock", license="cc0", author="mock")
+                for i in range(min(limit, 3))]
+
+    def download(self, item: StockItem, dest_dir: Path) -> Path:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        out = dest_dir / "stock.jpg"
+        out.write_bytes(b"MOCK-STOCK")
+        return out
+
+
 class MockDigitalHuman:
-    def submit(self, audio_path: Path, avatar_id: str | None) -> AvatarJob:
+    def submit(self, audio_path: Path, avatar_id: str | None,
+               background: Path | None = None) -> AvatarJob:
         return AvatarJob(job_id="mock-job-1", finished=False)
 
     def poll(self, job: AvatarJob, dest_dir: Path) -> AvatarJob:
@@ -1200,7 +1249,7 @@ from dataclasses import dataclass
 from app.providers import mock
 from app.providers.base import (
     AsrProvider, DigitalHumanProvider, LlmProvider, ModerationProvider,
-    TtsProvider, VideoParseProvider,
+    StockProvider, TtsProvider, VideoParseProvider,
 )
 
 
@@ -1212,20 +1261,21 @@ class ProviderBundle:
     tts: TtsProvider
     digital_human: DigitalHumanProvider
     moderation: ModerationProvider
+    stock: StockProvider
 
 
 def build_mock_bundle() -> ProviderBundle:
     return ProviderBundle(
         parse=mock.MockParse(), asr=mock.MockAsr(), llm=mock.MockLlm(),
         tts=mock.MockTts(), digital_human=mock.MockDigitalHuman(),
-        moderation=mock.MockModeration(),
+        moderation=mock.MockModeration(), stock=mock.MockStock(),
     )
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `pytest tests/test_providers_mock.py -v`
-Expected: PASS ×9
+Expected: PASS ×10
 
 - [ ] **Step 5: Commit**
 
@@ -1535,12 +1585,19 @@ def run(ctx) -> None:
 `stages/avatar.py`：
 
 ```python
+from pathlib import Path
+
+from app.models.asset import Asset
 from app.pipeline.stages._util import latest_file, register_file
 
 
 def run(ctx) -> None:
     audio = latest_file(ctx, "audio")
-    job = ctx.bundle.digital_human.submit(audio, ctx.task.avatar_id)
+    background = None  # v1.2：背景素材可选（平台场景/自建库/检索缓存）
+    if ctx.task.background_asset_id:
+        asset = ctx.db.get(Asset, ctx.task.background_asset_id)
+        background = Path(asset.path) if asset and asset.path else None
+    job = ctx.bundle.digital_human.submit(audio, ctx.task.avatar_id, background)
     # Mock 下一次 poll 即完成；真实实现由 worker 延时轮询
     job = ctx.bundle.digital_human.poll(job, ctx.task_dir)
     if not job.finished or job.video_path is None:
@@ -1610,7 +1667,7 @@ Expected: PASS ×4
 
 ```powershell
 git add backend/app/pipeline/stages backend/tests/test_stages.py
-git commit -m "feat: ten pipeline stage handlers with mock backends"
+git commit -m "feat: eleven pipeline stage handlers with mock backends"
 ```
 
 ---
@@ -2203,6 +2260,7 @@ class TaskCreate(BaseModel):
     language: str = "zh"
     voice_id: str | None = None
     avatar_id: str | None = None
+    background_asset_id: int | None = None
     subtitle_style: dict | None = None
     title_style: dict | None = None
     pip_config: dict | None = None
@@ -2236,6 +2294,7 @@ def create_task(body: TaskCreate, bg: BackgroundTasks,
     task = Task(user_id=user.id, source_url=body.source_url,
                 target_industry=body.target_industry, product_brief=body.product_brief,
                 language=body.language, voice_id=body.voice_id, avatar_id=body.avatar_id,
+                background_asset_id=body.background_asset_id,
                 subtitle_style=body.subtitle_style, title_style=body.title_style,
                 pip_config=body.pip_config, status=TaskStatus.PENDING)
     db.add(task)

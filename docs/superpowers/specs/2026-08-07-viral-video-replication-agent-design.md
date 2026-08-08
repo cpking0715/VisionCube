@@ -59,7 +59,7 @@ VisionCube/
 
 - API 层：鉴权、参数校验、任务创建与输入预检、人工确认入口、SSE 推送、文件下载
 - Pipeline 层：状态机定义与转移控制、各阶段处理器（纯编排逻辑，不含第三方调用细节）
-- Provider 层：六类能力的抽象接口与具体实现，上层只依赖接口（见 §4）
+- Provider 层：七类能力的抽象接口与具体实现，上层只依赖接口（见 §4）
 - Worker 层：Arq job 定义、数字人异步轮询、启动时卡死任务扫描
 
 ### 3.3 多用户预留设计
@@ -79,8 +79,9 @@ VisionCube/
 | `AsrProvider` | 音频文件 | 带时间戳的逐句文案 |
 | `LlmProvider` | prompt + 参数 | 文本（结构分析 JSON / 备选脚本 / 封面标题） |
 | `TtsProvider` | 文本 + 音色 ID + 语速情绪参数 | 音频文件 + 逐句时间戳；另提供 `clone_voice(样本音频) -> voice_id`（上传参考音色，供应商侧克隆） |
-| `DigitalHumanProvider` | 音频 + 形象 ID | 异步任务句柄；轮询后得口播视频 |
+| `DigitalHumanProvider` | 音频 + 形象 ID + 背景素材（可选） | 异步任务句柄；轮询后得口播视频 |
 | `ModerationProvider` | 文本 / 视频文件 | 通过与否 + 违规点明细 |
+| `StockProvider` | 关键词 + 数量 | 素材清单（直链/缩略图/来源/许可/作者）；实现：自建素材库、Openverse（免 Key，CC 许可）、Pixabay/Pexels（免费 Key，可商用） |
 
 契约测试：每类接口配一套 fixture 驱动的契约测试，替换供应商时新实现必须通过同一套测试。
 
@@ -97,7 +98,7 @@ VisionCube/
 | 标题话题生成 | `meta_generate.py` | 脚本确认后，`LlmProvider` 基于确认稿生成 3 套"标题 + 话题标签"方案供用户选择（即使人工发布也是必需物料） |
 | 文本审核 | `moderate_text.py` | 确认稿送 `ModerationProvider`；未过则携带违规点反馈自动回路重新改写（最多 2 次） |
 | TTS | `synthesize.py` | 确认稿 + 所选音色 → 语音 + 逐句时间戳 |
-| 数字人 | `avatar.py` | 音频 + 形象 → 提交驱动任务 → Arq 延时任务轮询 → 口播视频 |
+| 数字人 | `avatar.py` | 音频 + 形象 + 背景素材（可选，默认平台场景）→ 提交驱动任务 → Arq 延时任务轮询 → 口播视频 |
 | 剪辑 | `compose.py` | ASS 字幕烧录（按 subtitle_style）+ BGM 混音（人声/BGM 音量配比）+ 9:16 MP4 输出 |
 | 封面生成 | `cover.py` | **3 种风格方案**（A 大字冲击型 / B 干净截帧型 / C 情绪渲染型），每种 FFmpeg 抽关键帧 × LLM 标题文案 → Pillow 合成 1-2 张，共 3-6 张候选；支持调参（标题文案/配色/文字位置）后重新生成 |
 | 成片审核 | `moderate_video.py` | 成片截帧 + 音轨送 `ModerationProvider`，通过才允许下载 |
@@ -109,6 +110,8 @@ VisionCube/
 封面实现：MVP 采用"关键帧 + 标题排版"，不引入文生图 API；如需纯 AI 封面，后续新增 `CoverProvider` 实现即可。
 
 数字人资产：MVP 使用商用平台公共形象/音色或用户已授权克隆资产的引用 ID，系统不自训模型；`assets` 表管理形象、音色、BGM 库。
+
+素材体系（v1.2）：背景与画中画素材分开保存，各有三种来源——数字人平台内置场景（供应商引用）、自建素材库（用户上传，入 `assets` 表）、开源免费素材库检索（`StockProvider`，下载缓存后同样入 `assets` 表）。新建任务时可任选其一作为背景；画中画从 pip 分类中选择。
 
 ## 6. 状态机与数据流
 
@@ -177,7 +180,7 @@ PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
 - `tasks`：状态机主表。含 `status`、`failed_stage`、`source_url`、`target_industry`、`product_brief`、`subtitle_style`/`title_style`/`pip_config`(JSON)、`selected_cover`、语言/音色/形象选项、各阶段产物引用
 - `scripts`：多版本文案（原版 + 1-3 改写版 + 确认稿标记 + 整改轮次）
 - `publish_metas`：标题+话题方案（每任务 3 版，含选中标记），REVIEW 阶段选择；作为未来自动发布的物料，也随成片打包供人工发布使用
-- `assets`：数字人形象、音色、BGM（类型、供应商引用 ID、文件引用）
+- `assets`：数字人形象、音色、BGM、背景素材、画中画素材（kind 区分：avatar/voice/bgm/background/pip；source 区分：upload/openverse/pixabay/pexels/platform；背景与画中画分目录存储 `data/{user_id}/stocks/backgrounds/` 与 `.../pips/`）
 - `video_files`：所有媒体文件（路径、类型、大小、时长、所属任务/阶段）
 - `stage_logs`：阶段执行与错误留痕
 
@@ -238,3 +241,14 @@ PENDING → PARSING → TRANSCRIBING → ANALYZING → REWRITING
 5. **发布物料包**：任务完成时导出"成片 MP4 + 选定封面 + 选中标题与话题文本"物料包，为未来自动发布预留标准化输出（自动发布本身仍不在 MVP）。
 
 实施节奏：阶段 1 落地数据模型字段、状态机新状态与 Mock 阶段（生成逻辑全 Mock）；真实生成与交互选择（标题/封面选择器、音色上传、调参重生成）随阶段 2-4 接入。
+
+## 15. v1.2 素材体系优化（2026-08-08）
+
+数字人与声音为生成式产出，背景支持多方案选择：
+
+1. **背景三来源**：数字人平台内置场景（默认，供应商引用 ID）、自建素材库（用户上传/系统缓存的检索结果）、开源免费素材库实时检索（`StockProvider`：Openverse 免 Key / Pixabay / Pexels 免费 Key，均需验证许可证后入库）。
+2. **背景/画中画分开保存**：`assets` 表以 `kind`（background/pip）+ `source`（upload/openverse/pixabay/pexels/platform）双字段区分，文件系统按 `data/{user_id}/stocks/backgrounds/` 与 `pips/` 分目录；检索下载的素材缓存入库后即为自建素材库成员，后续可直接复用无需重新检索。
+3. **任务级选择**：`tasks.background_asset_id` 指定背景素材；avatar 阶段优先将背景传给数字人 API（平台支持背景参数时），不支持时由 compose 阶段叠加；画中画仍由 `pip_config` 指定。
+4. **检索为交互 API 而非流水线阶段**：用户在新建任务向导中搜索关键词 → `GET /api/stocks/search` 返回候选 → 选中后下载缓存入 `assets`。
+
+实施节奏：阶段 1 落地 `StockProvider` 契约与 Mock、`assets` 分类字段、`background_asset_id`；真实检索实现（Openverse 优先，免 Key）随阶段 2 接入。
