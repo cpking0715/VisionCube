@@ -1058,7 +1058,8 @@ git commit -m "feat: provider protocols and shared data structures"
 from pathlib import Path
 
 from app.providers.mock import (
-    MockAsr, MockDigitalHuman, MockLlm, MockModeration, MockParse, MockTts,
+    MockAsr, MockDigitalHuman, MockLlm, MockModeration, MockParse, MockStock,
+    MockTts,
 )
 from app.providers.registry import ProviderBundle, build_mock_bundle
 
