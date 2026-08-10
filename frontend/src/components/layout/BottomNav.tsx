@@ -1,13 +1,15 @@
 import { NavLink } from 'react-router-dom'
-import { NAV_ITEMS } from './SideNav'
+import { ICON_PATHS, NAV_ITEMS } from './SideNav'
+
+// 手机端保留 3 个高频入口，保证触控宽度（≥44px）；新建任务由任务列表页 FAB 提供
+const MOBILE_TOS = ['/', '/assets', '/settings']
 
 /** 底部导航（DESIGN.md §4.1）：仅手机端显示（<md），56px 高，触控目标 ≥44px */
 export function BottomNav() {
-  // 手机端只显示前 4 项，保证触控宽度
-  const items = NAV_ITEMS.filter((i) => !i.disabled).slice(0, 4)
+  const items = NAV_ITEMS.filter((i) => MOBILE_TOS.includes(i.to))
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-stretch border-t border-gray-200 bg-white md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-stretch border-t border-line bg-panel/85 backdrop-blur-md md:hidden"
       aria-label="底部导航"
     >
       {items.map((item) => (
@@ -17,7 +19,7 @@ export function BottomNav() {
           end={item.to === '/'}
           className={({ isActive }) =>
             `flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors duration-fast ${
-              isActive ? 'text-primary-600' : 'text-gray-500 hover:text-gray-700'
+              isActive ? 'text-primary-400' : 'text-ink-2 hover:text-ink-1'
             }`
           }
         >
@@ -30,7 +32,7 @@ export function BottomNav() {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d={item.icon === 'plus' ? 'M12 5v14M5 12h14' : 'M3.75 12h16.5M3.75 6.75h16.5M3.75 17.25h16.5'} />
+            <path d={ICON_PATHS[item.icon]} />
           </svg>
           <span>{item.label}</span>
         </NavLink>

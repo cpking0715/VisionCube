@@ -1,11 +1,11 @@
 interface SpinnerProps {
-  size?: 'sm' | 'md' | 'lg'
-  color?: 'primary' | 'light'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+  color?: 'primary' | 'light' | 'white'
   className?: string
 }
 
-const sizeClass = { sm: 'h-4 w-4', md: 'h-6 w-6', lg: 'h-10 w-10' }
-const colorClass = { primary: 'text-primary-500', light: 'text-white' }
+const sizeClass = { xs: 'h-3 w-3', sm: 'h-4 w-4', md: 'h-6 w-6', lg: 'h-10 w-10' }
+const colorClass = { primary: 'text-primary-500', light: 'text-white', white: 'text-white' }
 
 /** 环形加载图标（DESIGN.md §3.2.6） */
 export function Spinner({ size = 'md', color = 'primary', className = '' }: SpinnerProps) {

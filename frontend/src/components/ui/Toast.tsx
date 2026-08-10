@@ -48,15 +48,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((t) => (
           <div
             key={t.id}
-            className={`flex w-80 max-w-[calc(100vw-2rem)] items-center justify-between gap-3 rounded-md border bg-white px-4 py-3 shadow-lg ${typeStyle[t.type]}`}
+            className={`flex w-80 max-w-[calc(100vw-2rem)] items-center justify-between gap-3 rounded-md border bg-panel px-4 py-3 shadow-lg ${typeStyle[t.type]}`}
             role="alert"
           >
-            <span className="text-sm text-gray-700">{t.message}</span>
+            <span className="text-sm text-ink-1">{t.message}</span>
             <button
               type="button"
               onClick={() => remove(t.id)}
               aria-label="关闭"
-              className="text-gray-400 hover:text-gray-600"
+              className="text-ink-3 hover:text-ink-2"
             >
               ×
             </button>

@@ -33,8 +33,8 @@ export default function TaskList() {
       {/* 页头 */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-800 md:text-2xl">复刻任务</h1>
-          <p className="mt-1 text-sm text-gray-400">追踪视频复刻流水线的完整进度</p>
+          <h1 className="text-xl font-bold text-ink-1 md:text-2xl">复刻任务</h1>
+          <p className="mt-1 text-sm text-ink-3">追踪视频复刻流水线的完整进度</p>
         </div>
         <Link to="/new" className="hidden md:block">
           <Button>新建任务</Button>
@@ -70,28 +70,28 @@ export default function TaskList() {
           <div className="card hidden overflow-hidden md:block">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50 text-left text-gray-500">
+                <tr className="border-b border-line bg-panel-2 text-left text-ink-2">
                   <th className="px-4 py-3 font-medium">ID</th>
                   <th className="px-4 py-3 font-medium">状态</th>
                   <th className="px-4 py-3 font-medium">源链接</th>
                   <th className="hidden px-4 py-3 font-medium lg:table-cell">行业</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-line">
                 {tasks.map((t) => (
-                  <tr key={t.id} className="hover:bg-gray-50">
+                  <tr key={t.id} className="hover:bg-panel-2/60">
                     <td className="px-4 py-3">
-                      <Link className="font-medium text-primary-600 hover:underline" to={`/tasks/${t.id}`}>
+                      <Link className="font-medium text-primary-400 hover:underline" to={`/tasks/${t.id}`}>
                         #{t.id}
                       </Link>
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={t.status} />
                     </td>
-                    <td className="max-w-64 truncate px-4 py-3 text-gray-600" title={t.source_url}>
+                    <td className="max-w-64 truncate px-4 py-3 text-ink-2" title={t.source_url}>
                       {t.source_url}
                     </td>
-                    <td className="hidden px-4 py-3 text-gray-600 lg:table-cell">
+                    <td className="hidden px-4 py-3 text-ink-2 lg:table-cell">
                       {t.target_industry ?? '-'}
                     </td>
                   </tr>

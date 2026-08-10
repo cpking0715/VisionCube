@@ -12,7 +12,7 @@ export function EmptyState({ title, description, action, compact = false }: Empt
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
       <div
-        className={`flex items-center justify-center rounded-full bg-gray-100 text-gray-300 ${compact ? 'h-20 w-20' : 'h-28 w-28'}`}
+        className={`flex items-center justify-center rounded-full bg-panel-2 text-ink-3 ${compact ? 'h-20 w-20' : 'h-28 w-28'}`}
         aria-hidden
       >
         <svg
@@ -29,8 +29,8 @@ export function EmptyState({ title, description, action, compact = false }: Empt
           />
         </svg>
       </div>
-      <p className={`font-semibold text-gray-700 ${compact ? 'text-base' : 'text-lg'}`}>{title}</p>
-      {description && <p className="max-w-sm text-sm text-gray-500">{description}</p>}
+      <p className={`font-semibold text-ink-1 ${compact ? 'text-base' : 'text-lg'}`}>{title}</p>
+      {description && <p className="max-w-sm text-sm text-ink-2">{description}</p>}
       {action && <div className="mt-1">{action}</div>}
     </div>
   )

@@ -8,7 +8,7 @@ interface TopNavProps {
 export function TopNav({ onMenuClick }: TopNavProps) {
   const navigate = useNavigate()
   return (
-    <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:h-16 md:px-6">
+    <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-line bg-panel/85 px-4 backdrop-blur-md md:h-16 md:px-6">
       <div className="flex items-center gap-3">
         {/* 手机端菜单按钮（平板 icon-only 侧栏不折叠，无需按钮） */}
         {onMenuClick && (
@@ -16,7 +16,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
             type="button"
             onClick={onMenuClick}
             aria-label="打开菜单"
-            className="flex h-10 w-10 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 lg:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-ink-2 hover:bg-panel-2 lg:hidden"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h16" />
@@ -34,7 +34,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
               <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
             </svg>
           </span>
-          <span className="text-lg font-bold text-gray-800">VisionCube</span>
+          <span className="text-lg font-bold text-ink-1">VisionCube</span>
         </button>
       </div>
       <div className="flex items-center gap-2">
@@ -42,7 +42,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
         <button
           type="button"
           aria-label="消息"
-          className="hidden h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 sm:flex"
+          className="hidden h-10 w-10 items-center justify-center rounded-md text-ink-2 hover:bg-panel-2 sm:flex"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" />
@@ -51,7 +51,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
         <button
           type="button"
           aria-label="用户菜单"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700 hover:bg-primary-200"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-500/15 text-sm font-semibold text-primary-300 hover:bg-primary-500/25"
         >
           {localStorage.getItem('username')?.[0]?.toUpperCase() ?? 'U'}
         </button>

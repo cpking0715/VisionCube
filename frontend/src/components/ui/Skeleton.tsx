@@ -8,7 +8,7 @@ export function Skeleton({ lines = 5, className = '' }: SkeletonProps) {
   return (
     <div className={`flex flex-col gap-3 ${className}`} aria-busy="true" aria-label="加载中">
       {Array.from({ length: lines }).map((_, i) => (
-        <div key={i} className="h-12 animate-pulse rounded-md bg-gray-100" />
+        <div key={i} className="h-12 animate-pulse rounded-md bg-panel-2" />
       ))}
     </div>
   )
@@ -20,7 +20,7 @@ interface SkeletonTextProps {
 
 /** 文本行骨架 */
 export function SkeletonText({ className = '' }: SkeletonTextProps) {
-  return <div className={`h-4 animate-pulse rounded bg-gray-100 ${className}`} />
+  return <div className={`h-4 animate-pulse rounded bg-panel-2 ${className}`} />
 }
 
 export type { SkeletonTextProps }

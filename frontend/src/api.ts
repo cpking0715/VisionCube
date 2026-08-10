@@ -73,18 +73,38 @@ function filenameFromDisposition(header: string | null, fallback: string): strin
 
 // 带 token 下载（后端要求 Authorization 头，不能用 <a href> 直链）
 export async function downloadFile(fileId: number): Promise<void> {
+  const { blob, filename } = await fetchFileBlob(fileId)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function fetchFileBlob(fileId: number): Promise<{ blob: Blob; filename: string }> {
   const res = await fetch(`/api/files/${fileId}/download`, {
     headers: { Authorization: `Bearer ${getToken()}` },
   })
   if (!res.ok) throw new Error('下载失败')
   const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  const cd = res.headers.get('content-disposition')
-  a.download = filenameFromDisposition(cd, `visioncube-${fileId}`)
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return {
+    blob,
+    filename: filenameFromDisposition(
+      res.headers.get('content-disposition'),
+      `visioncube-${fileId}`,
+    ),
+  }
+}
+
+/** 获取文件的可预览 URL（图片缩略图等），调用方负责 revokeObjectURL */
+export async function fetchFileUrl(fileId: number): Promise<string> {
+  const res = await fetch(`/api/files/${fileId}/download`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  })
+  if (!res.ok) throw new Error('获取文件失败')
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
 }

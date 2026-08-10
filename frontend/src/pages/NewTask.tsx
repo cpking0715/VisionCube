@@ -1,197 +1,124 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { createTask } from '../api'
-import { Button } from '../components/ui/Button'
-import { Input } from '../components/ui/Input'
+import { useEffect, useState } from 'react'
+import { listTasks, type TaskOut } from '../api'
+import { AppShell } from '../components/layout'
+import { CreateTaskWizard, HowItWorks, StatCard, TaskListCard } from '../components/business'
 
-const INDUSTRIES = ['美妆', '数码', '食品', '服饰', '家居', '母婴', '汽车']
+/** 需要人工介入的暂停态（归入"待审核"） */
+const MANUAL_STATES = new Set(['AWAITING_SCRIPT', 'REVIEW'])
+/** 终态（不归入"执行中"） */
+const FINAL_STATES = new Set(['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'])
 
-const STEPS = ['粘贴链接', '行业与卖点', '确认提交']
+const ICONS = {
+  all: (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  ),
+  running: (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 8v4l2.5 2.5" />
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  ),
+  review: (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 6v6h4" />
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  ),
+  done: (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 13l4 4L19 7" />
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  ),
+}
 
-/** 新建任务向导（DESIGN.md §5.3）：链接 → 行业/卖点 → 确认（音色/形象/字幕配置属阶段 2） */
+/** 卡片工作台首页：欢迎横幅 + 统计卡 + 创建任务 + 最近任务 + 工作流说明 */
 export default function NewTask() {
-  const [step, setStep] = useState(0)
-  const [sourceUrl, setSourceUrl] = useState('')
-  const [urlError, setUrlError] = useState('')
-  const [industry, setIndustry] = useState('')
-  const [brief, setBrief] = useState('')
-  const [error, setError] = useState('')
-  const [pending, setPending] = useState(false)
-  const nav = useNavigate()
+  const [tasks, setTasks] = useState<TaskOut[]>([])
+  const [loaded, setLoaded] = useState(false)
 
-  function validateUrl(): boolean {
-    const ok = /^https?:\/\/.+/i.test(sourceUrl)
-    setUrlError(ok ? '' : '请输入以 http:// 或 https:// 开头的有效链接')
-    return ok
-  }
+  useEffect(() => {
+    listTasks()
+      .then(setTasks)
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [])
 
-  function next() {
-    if (step === 0 && !validateUrl()) return
-    setStep((s) => Math.min(s + 1, STEPS.length - 1))
-  }
-
-  function back() {
-    setStep((s) => Math.max(s - 1, 0))
-  }
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!validateUrl()) return
-    setPending(true)
-    setError('')
-    try {
-      const task = await createTask({
-        source_url: sourceUrl,
-        target_industry: industry || null,
-        product_brief: brief || null,
-      })
-      nav(`/tasks/${task.id}`)
-    } catch (err) {
-      setError(`创建失败：${String(err).replace(/^Error: /, '')}`)
-      setPending(false)
-    }
-  }
+  const running = tasks.filter((t) => !MANUAL_STATES.has(t.status) && !FINAL_STATES.has(t.status)).length
+  const reviewing = tasks.filter((t) => MANUAL_STATES.has(t.status)).length
+  const completed = tasks.filter((t) => t.status === 'COMPLETED').length
 
   return (
-    <div className="mx-auto w-full max-w-[640px]">
-      {/* 进度指示器：手机圆点，桌面带标签 */}
-      <div className="mb-8">
-        <ol className="flex items-center gap-1">
-          {STEPS.map((label, i) => (
-            <li key={label} className="flex flex-1 items-center gap-1">
-              <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium ${
-                  i < step
-                    ? 'bg-primary-500 text-white'
-                    : i === step
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'bg-gray-100 text-gray-400'
-                }`}
-              >
-                {i < step ? '✓' : i + 1}
-              </span>
-              {i < STEPS.length - 1 && (
-                <span className={`h-0.5 flex-1 rounded ${i < step ? 'bg-primary-500' : 'bg-gray-200'}`} />
-              )}
-            </li>
-          ))}
-        </ol>
-        <div className="mt-2 hidden justify-between text-sm text-gray-500 md:flex">
-          {STEPS.map((label, i) => (
-            <span key={label} className={i === step ? 'font-medium text-primary-600' : ''}>
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <form onSubmit={submit} className="card flex flex-col gap-5 p-6">
-        {step === 0 && (
-          <div className="flex flex-col gap-4">
-            <Input
-              label="源视频链接"
-              required
-              type="url"
-              placeholder="粘贴抖音分享链接"
-              value={sourceUrl}
-              onChange={(e) => {
-                setSourceUrl(e.target.value)
-                if (urlError) validateUrl()
-              }}
-              error={urlError}
-              autoFocus
-            />
-            <p className="text-xs text-gray-400">
-              支持 http(s) 直链；稍后阶段将支持抖音分享口令解析
-            </p>
-          </div>
-        )}
-
-        {step === 1 && (
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-gray-700">目标行业</span>
-              <div className="flex flex-wrap gap-2">
-                {INDUSTRIES.map((ind) => (
-                  <button
-                    key={ind}
-                    type="button"
-                    onClick={() => setIndustry(industry === ind ? '' : ind)}
-                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                      industry === ind
-                        ? 'border-primary-500 bg-primary-100 text-primary-700'
-                        : 'border-gray-200 text-gray-600 hover:border-primary-200'
-                    }`}
-                  >
-                    {ind}
-                  </button>
-                ))}
-              </div>
+    <AppShell>
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
+        {/* ── 欢迎横幅 ── */}
+        <section
+          className="relative animate-fade-up overflow-hidden rounded-2xl shadow-card"
+          aria-label="欢迎"
+        >
+          <img
+            src="/hero-bg.png"
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="eager"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-primary-900/85 via-primary-700/60 to-secondary-500/10" />
+          <div className="relative flex flex-col gap-4 px-5 py-8 sm:px-8 sm:py-10 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-widest text-primary-200">
+                VisionCube Studio
+              </p>
+              <h1 className="mt-2 text-xl font-bold text-white sm:text-2xl">
+                你好，创作者
+              </h1>
+              <p className="mt-1.5 max-w-md text-sm leading-relaxed text-primary-100/90">
+                粘贴一条抖音链接，自动解析、改写脚本、生成数字人成片，一键发布
+              </p>
             </div>
-            <Input
-              label="行业（自定义）"
-              placeholder="未命中预设时手动输入"
-              value={INDUSTRIES.includes(industry) ? '' : industry}
-              onChange={(e) => setIndustry(e.target.value)}
-            />
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-gray-700">产品卖点描述（可选）</span>
-              <textarea
-                className="input h-auto min-h-24 resize-y py-2"
-                rows={3}
-                placeholder="例如：主打控油持妆，适合油皮，性价比高…"
-                value={brief}
-                onChange={(e) => setBrief(e.target.value)}
-              />
-            </label>
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .querySelector('[data-create-task]')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-gradient-brand px-5 text-sm font-semibold text-white shadow-md transition-all duration-normal hover:-translate-y-0.5 hover:shadow-lg"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              开始新任务
+            </button>
           </div>
-        )}
+        </section>
 
-        {step === 2 && (
-          <div className="flex flex-col gap-4">
-            <h2 className="text-base font-semibold text-gray-800">确认任务信息</h2>
-            <dl className="divide-y divide-gray-50 rounded-md border border-gray-100 text-sm">
-              <div className="flex flex-col gap-1 px-4 py-3">
-                <dt className="text-gray-400">源链接</dt>
-                <dd className="break-all text-gray-700">{sourceUrl}</dd>
-              </div>
-              <div className="flex flex-col gap-1 px-4 py-3">
-                <dt className="text-gray-400">目标行业</dt>
-                <dd className="text-gray-700">{industry || '未指定（通用）'}</dd>
-              </div>
-              <div className="flex flex-col gap-1 px-4 py-3">
-                <dt className="text-gray-400">产品卖点</dt>
-                <dd className="whitespace-pre-wrap text-gray-700">{brief || '未填写'}</dd>
-              </div>
-            </dl>
-            <p className="text-xs text-gray-400">
-              提交后任务将自动进入解析流水线，可在任务列表实时查看进度
-            </p>
+        {/* ── 统计卡片 ── */}
+        <section className="mt-4 grid grid-cols-2 gap-3 md:mt-5 md:grid-cols-4 md:gap-4">
+          <StatCard label="全部任务" value={loaded ? tasks.length : 0} icon={ICONS.all} tone="primary" delay={40} />
+          <StatCard label="执行中" value={running} icon={ICONS.running} tone="info" delay={80} />
+          <StatCard label="待审核" value={reviewing} icon={ICONS.review} tone="warning" delay={120} />
+          <StatCard label="已完成" value={completed} icon={ICONS.done} tone="success" delay={160} />
+        </section>
+
+        {/* ── 主工作区：创建任务 + 最近任务 ── */}
+        <section className="mt-4 grid items-start gap-4 md:mt-5 lg:grid-cols-3">
+          <div data-create-task className="scroll-mt-16 lg:col-span-2">
+            <CreateTaskWizard />
           </div>
-        )}
+          <TaskListCard tasks={tasks} />
+        </section>
 
-        {error && <p className="text-sm text-danger">{error}</p>}
-
-        {/* 底部操作栏：桌面/平板页内，手机固定底部 */}
-        <div className="flex justify-between gap-3 md:justify-end">
-          {step > 0 ? (
-            <Button type="button" variant="secondary" onClick={back} disabled={pending}>
-              上一步
-            </Button>
-          ) : (
-            <span />
-          )}
-          {step < STEPS.length - 1 ? (
-            <Button type="button" onClick={next}>
-              下一步
-            </Button>
-          ) : (
-            <Button type="submit" loading={pending}>
-              提交任务
-            </Button>
-          )}
-        </div>
-      </form>
-    </div>
+        {/* ── 工作流说明 ── */}
+        <section className="mt-4 grid gap-3 md:mt-5 md:grid-cols-3 md:gap-4">
+          <HowItWorks />
+        </section>
+      </div>
+    </AppShell>
   )
 }

@@ -27,26 +27,26 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90vh] w-full flex-col rounded-t-xl bg-white shadow-xl sm:max-w-[560px] sm:rounded-lg"
+        className="flex max-h-[90vh] w-full flex-col rounded-t-xl bg-panel shadow-xl sm:max-w-[560px] sm:rounded-lg"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+          <h2 className="text-lg font-semibold text-ink-1">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="关闭"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-ink-3 hover:bg-panel-2 hover:text-ink-2"
           >
             ×
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">{footer}</div>
+          <div className="flex justify-end gap-3 border-t border-line px-6 py-4">{footer}</div>
         )}
       </div>
     </div>
@@ -85,7 +85,7 @@ export function Dialog({
           <button
             type="button"
             onClick={onCancel}
-            className="h-10 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="h-10 rounded-md border border-line-strong px-4 text-sm font-medium text-ink-1 hover:bg-panel-2"
           >
             {cancelText}
           </button>
@@ -99,7 +99,7 @@ export function Dialog({
         </>
       }
     >
-      {description && <p className="text-sm text-gray-600">{description}</p>}
+      {description && <p className="text-sm text-ink-2">{description}</p>}
     </Modal>
   )
 }

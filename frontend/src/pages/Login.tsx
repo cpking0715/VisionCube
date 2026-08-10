@@ -27,17 +27,23 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-[400px] rounded-lg bg-white p-8 shadow-sm">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+      {/* 背景氛围：品牌渐变光斑 */}
+      <div aria-hidden className="absolute inset-0">
+        <div className="absolute -top-32 left-1/2 h-96 w-[42rem] -translate-x-1/2 rounded-full bg-primary-400/25 blur-3xl" />
+        <div className="absolute -bottom-40 right-0 h-80 w-96 rounded-full bg-secondary-400/25 blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-[400px] animate-fade-up rounded-2xl border border-line bg-panel/90 p-8 shadow-card backdrop-blur">
         <div className="mb-8 flex flex-col items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-md bg-primary-500">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-brand shadow-glow">
             <svg className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
             </svg>
           </span>
           <div className="text-center">
-            <h1 className="text-xl font-bold text-gray-800">VisionCube</h1>
-            <p className="mt-1 text-sm text-gray-400">抖音爆款视频复刻智能体</p>
+            <h1 className="text-xl font-bold text-ink-1">VisionCube</h1>
+            <p className="mt-1 text-sm text-ink-3">抖音爆款视频复刻智能体</p>
           </div>
         </div>
         <form onSubmit={submit} className="flex flex-col gap-4">

@@ -9,19 +9,19 @@ export function TaskCard({ task }: { task: TaskOut }) {
     <Link to={`/tasks/${task.id}`} className="block">
       <Card hover className="p-4">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-sm font-semibold text-gray-800">
+          <p className="truncate text-sm font-semibold text-ink-1">
             #{task.id} {task.target_industry ?? '通用行业'}
           </p>
           <StatusBadge status={task.status} />
         </div>
-        <p className="mt-2 truncate text-sm text-gray-500">{task.source_url}</p>
+        <p className="mt-2 truncate text-sm text-ink-2">{task.source_url}</p>
         <div className="mt-3 flex items-center justify-between">
           {task.error_message ? (
             <p className="truncate text-xs text-danger">{task.error_message}</p>
           ) : (
-            <span className="text-xs text-gray-400">点击查看详情</span>
+            <span className="text-xs text-ink-3">点击查看详情</span>
           )}
-          <svg className="h-4 w-4 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="h-4 w-4 text-ink-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 5l7 7-7 7" />
           </svg>
         </div>

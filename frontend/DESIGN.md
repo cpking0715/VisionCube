@@ -239,6 +239,25 @@ font-family: -apple-system, BlinkMacSystemFont, "Inter", "PingFang SC",
 | `shadow-md` | `0 4px 6px -1px rgb(0 0 0 / 0.1)` | 卡片 hover、Dropdown |
 | `shadow-lg` | `0 10px 15px -3px rgb(0 0 0 / 0.1)` | Modal、Drawer |
 | `shadow-xl` | `0 20px 25px -5px rgb(0 0 0 / 0.1)` | 浮层最高级 |
+| `shadow-card` | `0 1px 2px 0 rgb(79 70 229 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.08)` | **工作台卡片默认**（卡片工作台风格） |
+| `shadow-card-hover` | `0 2px 4px 0 rgb(79 70 229 / 0.06), 0 12px 32px -8px rgb(15 23 42 / 0.14)` | 工作台卡片 hover 悬浮 |
+| `shadow-glow` | `0 0 0 1px rgb(99 102 241 / 0.12), 0 8px 24px -6px rgb(99 102 241 / 0.35)` | 品牌图标/Logo 辉光 |
+
+#### 2.5.1 渐变（卡片工作台风格）
+
+| Token | 值 | 用途 |
+|---|---|---|
+| `gradient-brand` | `linear-gradient(135deg, #6366F1 0%, #818CF8 45%, #38BDF8 100%)` | 品牌强调：Logo、进度条填充、按钮 |
+| `gradient-brand-soft` | `linear-gradient(135deg, #EEF2FF 0%, #F0F9FF 55%, #E0F2FE 100%)` | 图标底、轻量强调背景 |
+| `gradient-hero` | `linear-gradient(160deg, rgb(79 70 229 / 0.96), rgb(99 102 241 / 0.92), rgb(56 189 248 / 0.88))` | 欢迎横幅遮罩（叠加背景图） |
+
+#### 2.5.2 动画
+
+| Token | 时长/缓动 | 用途 |
+|---|---|---|
+| `animate-fade-up` | 0.4s cubic-bezier(0.4,0,0.2,1) | 卡片依次入场（配合 animationDelay 错峰） |
+| `animate-fade-in` | 0.3s ease-out | 步骤内容切换 |
+| `animate-scale-in` | 0.25s cubic-bezier(0.4,0,0.2,1) | 下拉/浮层出现 |
 
 ### 2.6 边框
 
@@ -416,6 +435,8 @@ font-family: -apple-system, BlinkMacSystemFont, "Inter", "PingFang SC",
 #### 3.3.2 Card
 
 容器组件，`rounded-md shadow-sm border border-gray-200 bg-white`。hover 时 `shadow-md`。
+
+**卡片工作台变体（`panel`）**：`rounded-xl border-gray-200/80 bg-white shadow-card`，hover 时 `shadow-card-hover` + 轻微上移；`panel-title` 为分区小标题（`text-[11px] uppercase text-gray-400`）。工作台页面（首页/任务详情）一律使用 `panel` 变体。
 
 padding 响应式：手机 `space-4`、平板 `space-5`、桌面 `space-6`。
 

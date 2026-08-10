@@ -45,7 +45,7 @@ export interface StageLogItem {
  */
 export function StageTimeline({ logs }: { logs: StageLogItem[] }) {
   if (logs.length === 0) {
-    return <p className="py-4 text-center text-sm text-gray-400">暂无阶段记录</p>
+    return <p className="py-4 text-center text-sm text-ink-3">暂无阶段记录</p>
   }
   const byStage = new Map<string, StageLogItem>()
   for (const log of logs) byStage.set(log.stage, log)
@@ -62,20 +62,20 @@ export function StageTimeline({ logs }: { logs: StageLogItem[] }) {
               ? 'bg-danger'
               : log.status === 'started'
                 ? 'bg-info'
-                : 'bg-gray-300'
+                : 'bg-ink-3'
         return (
           <li key={stage} className="flex min-w-32 shrink-0 flex-col md:min-w-0 md:flex-row">
             {/* 状态点 + 连线 */}
             <div className="flex items-center gap-2 md:flex-col md:items-stretch md:gap-0">
               <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
               {!isLast && (
-                <span className="h-px w-8 bg-gray-200 md:h-8 md:w-px md:self-center" />
+                <span className="h-px w-8 bg-line md:h-8 md:w-px md:self-center" />
               )}
             </div>
             {/* 内容 */}
             <div className={`-mt-1 pb-1 md:pb-4 ${isLast ? '' : 'md:-mt-3 md:ml-4'}`}>
-              <p className="text-sm font-medium text-gray-700">{STAGE_LABELS[stage] ?? stage}</p>
-              <p className="text-xs text-gray-400">
+              <p className="text-sm font-medium text-ink-1">{STAGE_LABELS[stage] ?? stage}</p>
+              <p className="text-xs text-ink-3">
                 {log.status === 'started' && '进行中'}
                 {log.status === 'success' && '已完成'}
                 {log.status === 'failed' && '失败'}

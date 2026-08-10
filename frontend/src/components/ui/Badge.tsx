@@ -5,8 +5,8 @@ export type BadgeTone = 'primary' | 'gray' | 'success' | 'warning' | 'danger' | 
 type Tone = BadgeTone
 
 const toneClass: Record<Tone, string> = {
-  primary: 'bg-primary-100 text-primary-700',
-  gray: 'bg-gray-100 text-gray-600',
+  primary: 'bg-primary-500/15 text-primary-300',
+  gray: 'bg-panel-2 text-ink-2',
   success: 'bg-success-bg text-success',
   warning: 'bg-warning-bg text-warning',
   danger: 'bg-danger-bg text-danger',
@@ -14,8 +14,8 @@ const toneClass: Record<Tone, string> = {
 }
 
 const dotClass: Record<Tone, string> = {
-  primary: 'bg-primary-500',
-  gray: 'bg-gray-400',
+  primary: 'bg-primary-400',
+  gray: 'bg-ink-3',
   success: 'bg-success',
   warning: 'bg-warning',
   danger: 'bg-danger',

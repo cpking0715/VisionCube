@@ -12,7 +12,7 @@ export function Input({ label, error, required, className = '', id, ...rest }: I
   return (
     <div className="flex flex-col gap-1">
       {label && (
-        <label htmlFor={inputId} className="text-sm font-medium text-gray-700">
+        <label htmlFor={inputId} className="text-sm font-medium text-ink-1">
           {label}
           {required && <span className="text-danger"> *</span>}
         </label>

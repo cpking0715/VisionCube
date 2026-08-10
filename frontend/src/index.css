@@ -21,13 +21,23 @@
 
   /* 语义色 */
   --color-success: #10b981;
-  --color-success-bg: #ecfdf5;
+  --color-success-bg: rgb(16 185 129 / 0.12);
   --color-warning: #f59e0b;
-  --color-warning-bg: #fffbeb;
+  --color-warning-bg: rgb(245 158 11 / 0.12);
   --color-danger: #ef4444;
-  --color-danger-bg: #fef2f2;
+  --color-danger-bg: rgb(239 68 68 / 0.12);
   --color-info: #3b82f6;
-  --color-info-bg: #eff6ff;
+  --color-info-bg: rgb(59 130 246 / 0.12);
+
+  /* 深色主题语义色（未来浅色切换只需覆盖此组变量） */
+  --color-canvas: #0b0e14; /* 页面底色 */
+  --color-panel: #131722; /* 卡片底色 */
+  --color-panel-2: #1a1f2c; /* 嵌套容器/输入框/表格行 */
+  --color-line: #232a38; /* 边框 */
+  --color-line-strong: #2e3748; /* hover 边框/分隔线 */
+  --color-ink-1: #e8ebf2; /* 主文字 */
+  --color-ink-2: #9aa3b5; /* 次要文字 */
+  --color-ink-3: #5d6779; /* 弱文字/占位符 */
 
   /* 圆角（DESIGN.md §2.4） */
   --radius-sm: 4px;
@@ -40,6 +50,13 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+  /* 工作台卡片阴影（卡片工作台风格） */
+  --shadow-card: 0 1px 2px 0 rgb(79 70 229 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.08);
+  --shadow-card-hover: 0 2px 4px 0 rgb(79 70 229 / 0.06), 0 12px 32px -8px rgb(15 23 42 / 0.14);
+  /* 品牌渐变（深色底上更亮） */
+  --gradient-brand: linear-gradient(135deg, #818cf8 0%, #a5b4fc 45%, #38bdf8 100%);
+  --gradient-brand-soft: linear-gradient(135deg, rgb(129 140 248 / 0.16) 0%, rgb(56 189 248 / 0.1) 100%);
+  --gradient-hero: linear-gradient(160deg, rgb(49 46 129 / 0.98) 0%, rgb(67 56 202 / 0.95) 42%, rgb(2 132 199 / 0.9) 100%);
 
   /* 动效（DESIGN.md §2.7） */
   --duration-fast: 100ms;
@@ -49,7 +66,11 @@
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-700 font-sans antialiased;
+    @apply bg-canvas text-ink-1 font-sans antialiased;
+    background-image:
+      radial-gradient(1200px 480px at 15% -8%, rgb(129 140 248 / 0.1), transparent 60%),
+      radial-gradient(1000px 420px at 85% -12%, rgb(56 189 248 / 0.08), transparent 60%);
+    background-attachment: fixed;
   }
 
   /* 全局焦点可见性：键盘导航可辨识，鼠标点击不出现 */
@@ -64,14 +85,36 @@
 @layer components {
   /* 卡片容器（DESIGN.md §3.3.2） */
   .card {
-    @apply rounded-md shadow-sm border border-gray-200 bg-white;
+    @apply rounded-md shadow-sm border border-line bg-panel;
+  }
+
+  /* 工作台面板卡片：圆角层次 + 细腻阴影，hover 悬浮提升 */
+  .panel {
+    @apply rounded-xl border border-line bg-panel shadow-card;
+  }
+
+  .panel-hover {
+    @apply transition-all duration-normal hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card-hover;
+  }
+
+  /* 工作台分区小标题 */
+  .panel-title {
+    @apply flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3;
+  }
+
+  /* 渐变文字（品牌强调） */
+  .text-gradient {
+    background-image: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   /* 表单输入（DESIGN.md §3.1.2） */
   .input {
-    @apply w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700
-      placeholder:text-gray-400 focus:border-primary-500 focus:outline-none
-      focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400;
+    @apply w-full rounded-md border border-line bg-panel-2 px-3 text-sm text-ink-1
+      placeholder:text-ink-3 focus:border-primary-500 focus:outline-none
+      focus:ring-2 focus:ring-primary-500/20 disabled:bg-panel disabled:text-ink-3;
     height: 40px;
   }
 
