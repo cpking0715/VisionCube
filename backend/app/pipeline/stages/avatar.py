@@ -1,8 +1,12 @@
+import logging
+import time
 from pathlib import Path
 
 from app.core.exceptions import RecoverablePipelineError
 from app.models.asset import Asset
 from app.pipeline.stages._util import register_file, require_file
+
+logger = logging.getLogger(__name__)
 
 
 def run(ctx) -> None:
@@ -13,8 +17,20 @@ def run(ctx) -> None:
         asset = ctx.db.get(Asset, ctx.task.background_asset_id)
         background = Path(asset.path) if asset and asset.path else None
     job = ctx.bundle.digital_human.submit(audio, ctx.task.avatar_id, background)
-    # Mock 下一次 poll 即完成；真实实现由 worker 延时轮询
-    job = ctx.bundle.digital_human.poll(job, ctx.task_dir)
+
+    # 轮询等待任务完成（真实 API 需要时间生成）
+    max_wait = 600  # 最多等待 10 分钟
+    poll_interval = 5  # 每 5 秒轮询一次
+    elapsed = 0
+
+    while elapsed < max_wait:
+        job = ctx.bundle.digital_human.poll(job, ctx.task_dir)
+        if job.finished:
+            break
+        logger.info(f"数字人任务进行中，已等待 {elapsed} 秒...")
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
     if not job.finished or job.video_path is None:
-        raise RecoverablePipelineError("AVATAR_JOB_FAILED", "数字人任务未完成")
+        raise RecoverablePipelineError("AVATAR_JOB_FAILED", f"数字人任务超时（{max_wait} 秒）")
     register_file(ctx, job.video_path, "avatar_video", "GENERATING_AVATAR")

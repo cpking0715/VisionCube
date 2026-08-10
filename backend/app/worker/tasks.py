@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.models.task import Task, TaskStatus
 from app.pipeline.runner import PipelineRunner
 from app.pipeline.state_machine import PAUSE_STATES, TERMINAL_STATES
-from app.providers.registry import build_mock_bundle
+from app.providers.registry import build_provider_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ _NON_RECOVERABLE_ON_BOOT = (
 
 
 def _make_runner() -> PipelineRunner:
-    return PipelineRunner(build_mock_bundle(), data_root=settings.data_root)
+    return PipelineRunner(build_provider_bundle(), data_root=settings.data_root)
 
 
 async def run_pipeline(ctx: dict, task_id: int) -> None:

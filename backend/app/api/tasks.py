@@ -21,7 +21,7 @@ from app.models.user import User
 from app.models.video_file import VideoFile
 from app.pipeline.runner import PipelineRunner
 from app.pipeline.state_machine import assert_transition
-from app.providers.registry import build_mock_bundle
+from app.providers.registry import build_provider_bundle
 
 router = APIRouter()
 
@@ -30,7 +30,7 @@ _DATA_ROOT = None
 
 
 def _runner() -> PipelineRunner:
-    return PipelineRunner(build_mock_bundle(), data_root=_DATA_ROOT or settings.data_root)
+    return PipelineRunner(build_provider_bundle(), data_root=_DATA_ROOT or settings.data_root)
 
 
 def _run_now(task_id: int) -> None:
@@ -169,6 +169,7 @@ def retry_task(task_id: int, bg: BackgroundTasks,
     if not task.failed_stage:
         raise HTTPException(409, "task missing failed_stage")
     task.status = TaskStatus(task.failed_stage)  # 回到失败阶段重试（FAILED 无出边，不走状态机校验）
+    task.failed_stage = None
     task.error_code = None
     task.error_message = None
     db.commit()
